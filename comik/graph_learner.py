@@ -374,3 +374,11 @@ def glasso(X, alpha=1, w0=None, maxit=1000, rtol=1e-5, retall=False, verbosity="
         return W, problem
     else:
         return W
+
+
+# Dictionary for easy access to learning frameworks
+graph_learners = {
+    "glasso": glasso,
+    "dong": l2_degree_reg,
+    "kalofolias": log_degree_barrier,
+}
