@@ -38,12 +38,12 @@ def weight2degmap(N, return_array=False):
     import numpy as np
 
     Ne = int(N * (N - 1) / 2)  # Number of edges
-    row_idx1 = np.zeros((Ne, ))
-    row_idx2 = np.zeros((Ne, ))
+    row_idx1 = np.zeros((Ne,))
+    row_idx2 = np.zeros((Ne,))
     count = 0
     for i in np.arange(1, N):
-        row_idx1[count: (count + (N - i))] = i - 1
-        row_idx2[count: (count + (N - i))] = np.arange(i, N)
+        row_idx1[count : (count + (N - i))] = i - 1
+        row_idx2[count : (count + (N - i))] = np.arange(i, N)
         count = count + N - i
     row_idx = np.concatenate((row_idx1, row_idx2))
     col_idx = np.concatenate((np.arange(0, Ne), np.arange(0, Ne)))
@@ -55,9 +55,18 @@ def weight2degmap(N, return_array=False):
         return lambda w: K.dot(w), lambda d: K.transpose().dot(d)
 
 
-def log_degree_barrier(X, dist_type='sqeuclidean', alpha=1, beta=1, step=0.5,
-                       w0=None, maxit=1000, rtol=1e-5, retall=False,
-                       verbosity='NONE'):
+def log_degree_barrier(
+    X,
+    dist_type="sqeuclidean",
+    alpha=1,
+    beta=1,
+    step=0.5,
+    w0=None,
+    maxit=1000,
+    rtol=1e-5,
+    retall=False,
+    verbosity="NONE",
+):
     r"""
     Learn graph by imposing a log barrier on the degrees
     This is done by solving
@@ -65,10 +74,11 @@ def log_degree_barrier(X, dist_type='sqeuclidean', alpha=1, beta=1, step=0.5,
     \|W \odot Z\|_{1,1} - \alpha 1^{T} \log{W1} + \beta \| W \|_{F}^{2}`,
     where :math:`Z` is a pairwise distance matrix, and :math:`\mathcal{W}_m`
     is the set of valid symmetric weighted adjacency matrices.
+
     Parameters
     ----------
     X : array_like
-        An N-by-M data matrix of N variable observations in an M-dimensional
+        An N-by-M data matrix of M variable observations in an N-dimensional
         space. The learned graph will have N nodes.
     dist_type : string
         Type of pairwise distance between variables. See
@@ -92,6 +102,7 @@ def log_degree_barrier(X, dist_type='sqeuclidean', alpha=1, beta=1, step=0.5,
         :func:`pyunlocbox.solvers.solve`.
     verbosity : {'NONE', 'LOW', 'HIGH', 'ALL'}, optional
         Level of verbosity of the solver. See :func:`pyunlocbox.solvers.solve`.
+
     Returns
     -------
     W : array_like
@@ -99,42 +110,10 @@ def log_degree_barrier(X, dist_type='sqeuclidean', alpha=1, beta=1, step=0.5,
     problem : dict, optional
         Information about the solution of the optimization. Only returned if
         retall == True.
+
     Notes
     -----
-    This is the solver proposed in [Kalofolias, 2016] :cite:`kalofolias2016`.
-    Examples
-    --------
-    >>> import learn_graph as lg
-    >>> import networkx as nx
-    >>> import numpy as np
-    >>> import matplotlib.pyplot as plt
-    >>> from scipy import spatial
-    >>> G_gt = nx.waxman_graph(100)
-    >>> pos = nx.random_layout(G_gt)
-    >>> coords = np.array(list(pos.values()))
-    >>> def s1(x, y):
-            return np.sin((2 - x - y)**2)
-    >>> def s2(x, y):
-            return np.cos((x + y)**2)
-    >>> def s3(x, y):
-            return (x - 0.5)**2 + (y - 0.5)**3 + x - y
-    >>> def s4(x, y):
-            return np.sin(3 * ( (x - 0.5)**2 + (y - 0.5)**2 ) )
-    >>> X = np.array((s1(coords[:,0], coords[:,1]),
-                      s2(coords[:,0], coords[:,1]),
-                      s3(coords[:,0], coords[:,1]),
-                      s4(coords[:,0], coords[:,1]))).T
-    >>> z = 25 * spatial.distance.pdist(X, 'sqeuclidean')
-    >>> W = lg.log_degree_barrier(z)
-    >>> W[W < np.percentile(W, 96)] = 0
-    >>> G_learned = nx.from_numpy_matrix(W)
-    >>> plt.figure(figsize=(12, 6))
-    >>> plt.subplot(1,2,1)
-    >>> nx.draw(G_gt, pos=pos)
-    >>> plt.title('Ground Truth')
-    >>> plt.subplot(1,2,2)
-    >>> nx.draw(G_learned, pos=pos)
-    >>> plt.title('Learned')
+    This is the solver proposed in [Kalofolias, 2016].
     """
 
     # Parse X
@@ -147,7 +126,7 @@ def log_degree_barrier(X, dist_type='sqeuclidean', alpha=1, beta=1, step=0.5,
 
     # Parse initial weights
     w0 = np.zeros(z.shape) if w0 is None else w0
-    if (w0.shape != z.shape):
+    if w0.shape != z.shape:
         raise ValueError("w0 must be of dimension N(N-1)/2.")
 
     # Get primal-dual linear map
@@ -160,13 +139,15 @@ def log_degree_barrier(X, dist_type='sqeuclidean', alpha=1, beta=1, step=0.5,
     f1._prox = lambda w, gamma: np.maximum(0, w - (2 * gamma * z))
 
     f2 = functions.func()
-    f2._eval = lambda w: - alpha * np.sum(np.log(np.maximum(
-        np.finfo(np.float64).eps, K(w))))
+    f2._eval = lambda w: -alpha * np.sum(
+        np.log(np.maximum(np.finfo(np.float64).eps, K(w)))
+    )
     f2._prox = lambda d, gamma: np.maximum(
-        0, 0.5 * (d + np.sqrt(d**2 + (4 * alpha * gamma))))
+        0, 0.5 * (d + np.sqrt(d ** 2 + (4 * alpha * gamma)))
+    )
 
     f3 = functions.func()
-    f3._eval = lambda w: beta * np.sum(w**2)
+    f3._eval = lambda w: beta * np.sum(w ** 2)
     f3._grad = lambda w: 2 * beta * w
     lipg = 2 * beta
 
@@ -175,11 +156,12 @@ def log_degree_barrier(X, dist_type='sqeuclidean', alpha=1, beta=1, step=0.5,
 
     # Solve problem
     solver = solvers.mlfbf(L=K, Lt=Kt, step=stepsize)
-    problem = solvers.solve([f1, f2, f3], x0=w0, solver=solver, maxit=maxit,
-                            rtol=rtol, verbosity=verbosity)
+    problem = solvers.solve(
+        [f1, f2, f3], x0=w0, solver=solver, maxit=maxit, rtol=rtol, verbosity=verbosity
+    )
 
     # Transform weight matrix from vector form to matrix form
-    W = spatial.distance.squareform(problem['sol'])
+    W = spatial.distance.squareform(problem["sol"])
 
     if retall:
         return W, problem
@@ -187,9 +169,18 @@ def log_degree_barrier(X, dist_type='sqeuclidean', alpha=1, beta=1, step=0.5,
         return W
 
 
-def l2_degree_reg(X, dist_type='sqeuclidean', alpha=1, s=None, step=0.5,
-                  w0=None, maxit=1000, rtol=1e-5, retall=False,
-                  verbosity='NONE'):
+def l2_degree_reg(
+    X,
+    dist_type="sqeuclidean",
+    alpha=1,
+    s=None,
+    step=0.5,
+    w0=None,
+    maxit=1000,
+    rtol=1e-5,
+    retall=False,
+    verbosity="NONE",
+):
     r"""
     Learn graph by regularizing the l2-norm of the degrees.
     This is done by solving
@@ -198,10 +189,11 @@ def l2_degree_reg(X, dist_type='sqeuclidean', alpha=1, s=None, step=0.5,
     to :math:`\|W\|_{1,1} = s`, where :math:`Z` is a pairwise distance matrix,
     and :math:`\mathcal{W}_m`is the set of valid symmetric weighted adjacency
     matrices.
+
     Parameters
     ----------
     X : array_like
-        An N-by-M data matrix of N variable observations in an M-dimensional
+        An N-by-M data matrix of M variable observations in an N-dimensional
         space. The learned graph will have N nodes.
     dist_type : string
         Type of pairwise distance between variables. See
@@ -225,6 +217,7 @@ def l2_degree_reg(X, dist_type='sqeuclidean', alpha=1, s=None, step=0.5,
         :func:`pyunlocbox.solvers.solve`.
     verbosity : {'NONE', 'LOW', 'HIGH', 'ALL'}, optional
         Level of verbosity of the solver. See :func:`pyunlocbox.solvers.solve`.
+
     Returns
     -------
     W : array_like
@@ -232,16 +225,15 @@ def l2_degree_reg(X, dist_type='sqeuclidean', alpha=1, s=None, step=0.5,
     problem : dict, optional
         Information about the solution of the optimization. Only returned if
         retall == True.
+
     Notes
     -----
     This is the problem proposed in [Dong et al., 2015].
-    Examples
-    --------
     """
 
     # Parse X
     N = X.shape[0]
-    E = int(N * (N - 1.) / 2.)
+    E = int(N * (N - 1.0) / 2.0)
     z = spatial.distance.pdist(X, dist_type)  # Pairwise distances
 
     # Parse s
@@ -253,7 +245,7 @@ def l2_degree_reg(X, dist_type='sqeuclidean', alpha=1, s=None, step=0.5,
 
     # Parse initial weights
     w0 = np.zeros(z.shape) if w0 is None else w0
-    if (w0.shape != z.shape):
+    if w0.shape != z.shape:
         raise ValueError("w0 must be of dimension N(N-1)/2.")
 
     # Get primal-dual linear map
@@ -276,11 +268,11 @@ def l2_degree_reg(X, dist_type='sqeuclidean', alpha=1, s=None, step=0.5,
     f1._prox = lambda w, gamma: np.maximum(0, w - (2 * gamma * z))
 
     f2 = functions.func()
-    f2._eval = lambda w: 0.
+    f2._eval = lambda w: 0.0
     f2._prox = lambda d, gamma: s
 
     f3 = functions.func()
-    f3._eval = lambda w: alpha * (2 * np.sum(w**2) + np.sum(S(w)**2))
+    f3._eval = lambda w: alpha * (2 * np.sum(w ** 2) + np.sum(S(w) ** 2))
     f3._grad = lambda w: alpha * (4 * w + St(S(w)))
     lipg = 2 * alpha * (N + 1)
 
@@ -289,11 +281,12 @@ def l2_degree_reg(X, dist_type='sqeuclidean', alpha=1, s=None, step=0.5,
 
     # Solve problem
     solver = solvers.mlfbf(L=K, Lt=Kt, step=stepsize)
-    problem = solvers.solve([f1, f2, f3], x0=w0, solver=solver, maxit=maxit,
-                            rtol=rtol, verbosity=verbosity)
+    problem = solvers.solve(
+        [f1, f2, f3], x0=w0, solver=solver, maxit=maxit, rtol=rtol, verbosity=verbosity
+    )
 
     # Transform weight matrix from vector form to matrix form
-    W = spatial.distance.squareform(problem['sol'])
+    W = spatial.distance.squareform(problem["sol"])
 
     if retall:
         return W, problem
@@ -301,18 +294,18 @@ def l2_degree_reg(X, dist_type='sqeuclidean', alpha=1, s=None, step=0.5,
         return W
 
 
-def glasso(X, alpha=1, w0=None, maxit=1000, rtol=1e-5, retall=False,
-           verbosity='NONE'):
+def glasso(X, alpha=1, w0=None, maxit=1000, rtol=1e-5, retall=False, verbosity="NONE"):
     r"""
     Learn graph by imposing promoting sparsity in the inverse covariance.
     This is done by solving
     :math:`\tilde{W} = \underset{W \succeq 0}{\text{arg}\min} \,
     -\log \det W - \text{tr}(SW) + \alpha\|W \|_{1,1},
     where :math:`S` is the empirical (sample) covariance matrix.
+
     Parameters
     ----------
     X : array_like
-        An N-by-M data matrix of N variable observations in an M-dimensional
+        An N-by-M data matrix of M variable observations in an N-dimensional
         space. The learned graph will have N nodes.
     alpha : float, optional
         Regularization parameter acting on the l1-norm
@@ -329,6 +322,7 @@ def glasso(X, alpha=1, w0=None, maxit=1000, rtol=1e-5, retall=False,
     verbosity : {'NONE', 'ALL'}, optional
         Level of verbosity of the solver.
         See :func:`sklearn.covariance.graph_lasso`/
+
     Returns
     -------
     W : array_like
@@ -336,11 +330,10 @@ def glasso(X, alpha=1, w0=None, maxit=1000, rtol=1e-5, retall=False,
     problem : dict, optional
         Information about the solution of the optimization. Only returned if
         retall == True.
+
     Notes
     -----
-    This function uses the solver :func:`sklearn.covariance.graph_lasso`.
-    Examples
-    --------
+    This function uses the solver :func:`sklearn.covariance.graphical_lasso`.
     """
 
     # Parse X
@@ -348,30 +341,34 @@ def glasso(X, alpha=1, w0=None, maxit=1000, rtol=1e-5, retall=False,
 
     # Parse initial point
     w0 = np.ones(S.shape) if w0 is None else w0
-    if (w0.shape != S.shape):
+    if w0.shape != S.shape:
         raise ValueError("w0 must be of dimension N-by-N.")
 
     # Solve problem
     tstart = time.time()
-    res = graphical_lasso(emp_cov=S,
-                          alpha=alpha,
-                          cov_init=w0,
-                          mode='cd',
-                          tol=rtol,
-                          max_iter=maxit,
-                          verbose=(verbosity == 'ALL'),
-                          return_costs=True,
-                          return_n_iter=True)
+    res = graphical_lasso(
+        emp_cov=S,
+        alpha=alpha,
+        cov_init=w0,
+        mode="cd",
+        tol=rtol,
+        max_iter=maxit,
+        verbose=(verbosity == "ALL"),
+        return_costs=True,
+        return_n_iter=True,
+    )
 
-    problem = {'sol':       res[1],
-               'dual_sol':  res[0],
-               'solver':    'sklearn.covariance.graph_lasso',
-               'crit':      'dual_gap',
-               'niter':     res[3],
-               'time':      time.time() - tstart,
-               'objective': np.array(res[2])[:, 0]}
+    problem = {
+        "sol": res[1],
+        "dual_sol": res[0],
+        "solver": "sklearn.covariance.graph_lasso",
+        "crit": "dual_gap",
+        "niter": res[3],
+        "time": time.time() - tstart,
+        "objective": np.array(res[2])[:, 0],
+    }
 
-    W = problem['sol']
+    W = problem["sol"]
 
     if retall:
         return W, problem
