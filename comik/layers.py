@@ -97,7 +97,7 @@ class ComikLayer(torch.nn.Module):
         """
 
         # call constructor of parent class
-        super(ComikLayer, self).__init__()
+        super().__init__()
 
         # store attributes
         self.num_nodes = num_nodes
@@ -233,5 +233,9 @@ class ComikLayer(torch.nn.Module):
         # call the chosen graph learning framework with the current set of anchor points
         W = self.graph_learner(self.weight.t().detach().cpu().numpy())
 
-        # convert the weighted adjacency matrix into a graph Laplacian
+        # calculate the degree matrix D = diag(W1) with 1 = [1, ..., 1]^T
+        D = np.diag(np.matmul(W, np.ones(self.num_nodes)))
+
+        # calculate the fraph Laplacian L = D - W
+        self.L.data = D - W
 
