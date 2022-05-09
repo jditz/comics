@@ -14,7 +14,7 @@ def _init_kmeans(
     use_cuda: bool = False,
     distance: str = "euclidean",
 ):
-    """Initialization method for K-Means (k-Means++)
+    r"""Initialization method for K-Means (k-Means++)
 
     Parameters
     ----------
@@ -109,8 +109,8 @@ def kmeans_gpu(
     init: str = None,
     tol: float = 1e-4,
 ):
-    """Performing k-Means clustering (Lloyd's algorithm) with Tensors utilizing GPU resources.
-    
+    r"""Performing k-Means clustering (Lloyd's algorithm) with Tensors utilizing GPU resources.
+
     Parameters
     ----------
     x : Tensor
@@ -225,7 +225,7 @@ def kmeans(
     tol: float = 1e-4,
     use_cuda: bool = False,
 ):
-    """Wrapper for the k-Means clustering algorithm to utilize either GPU or CPU resources.
+    r"""Wrapper for the k-Means clustering algorithm to utilize either GPU or CPU resources.
     We always recommend to use the well-tested scikit-learn implementation (i.e. set
     'use_cuda' to False) unless there is an important reason to utilize GPU.
 
@@ -282,3 +282,67 @@ def kmeans(
             clusters = clusters.cuda()
 
     return clusters
+
+
+def sample_data(
+    data_loader: torch.utils.data.DataLoader, n_features: int, n_samples: int = 100000
+):
+    r"""Utility function that returns a specified number of samples as a tensor. The samples will
+    be taken from a specified PyTorch DataLoader object.
+
+    Parameters
+    ----------
+    data_loader : torch.utils.data.DataLoader
+        PyTorch DataLoader object that handles access to training data. In general, other objects 
+        can be used to access the data. The only prerequisite is that it is possible to retreive
+        the data and label as PyTorch Tensors when iterated over the object. We strongly recommend
+        to use a PyTorch DataLoader object.
+    n_features : int
+        Number of features in the data set. In other words, the data set consists of data points
+        with n_features dimentions.
+    n_samples : int
+        Number of data points that will be sampled from the data.
+
+    Returns
+    -------
+    samples : Tensor
+        Tensor containing the sampled data points.
+    """
+    # initialize the Tensor that stores all sampled data points
+    samples = torch.zeros(n_samples, n_features)
+
+    # determine the number of data points sampled per batch
+    #    -> we make sure that we sample at least 500 data points per batch to reduce runtime
+    n_samples_per_batch = max(
+        (n_samples + len(data_loader) - 1) // len(data_loader), 500
+    )
+
+    # iterate over the data set
+    already_sampled = 0
+    for data, _ in data_loader:
+        # stop if already enough data points have been sampled
+        if already_sampled >= n_samples:
+            break
+
+        # make sure to sample at most the number of data points in the current batch
+        max_samples_per_batch = min(data.size(0), n_samples_per_batch)
+
+        # sample random indices of the data Tensor (number of sampled indices is either the
+        # maximum number of data points or n_samples_per_batch, whatever is smaller)
+        indices = torch.randperm(data.size(0))[:max_samples_per_batch]
+        current_samples = data[indices]
+
+        # only use a subset of the sampled data points in this batch, if this batch would
+        # exceed the maximum number of samples
+        current_size = current_samples.size(0)
+        if already_sampled + current_size > n_samples:
+            current_size = n_samples - already_sampled
+            data_oliogmers = data_oliogmers[:current_size]
+
+        # update the samples Tensor with the current batch of sampled data points
+        samples[already_sampled : already_sampled + current_size] = current_samples
+        already_samples += current_size
+
+    # return the sampled data points
+    print(f"sample_data rounting returned {already_sampled} sampled data points")
+    return samples[:already_sampled, :]

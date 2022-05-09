@@ -2,10 +2,14 @@ r"""This module implements custom layers that are needed to create a
 comik network.
 """
 
+import math
+
 import numpy as np
 import torch
+from torch.nn.init import kaiming_uniform_
 
 from .graph_learner import graph_learners
+from .utils import kmeans
 
 
 class MatrixInverseSqrt(torch.autograd.Function):
@@ -62,8 +66,8 @@ class ComikLayer(torch.nn.Module):
 
     This layer implements a convolutional graph kernel layer as described in the paper.
     The weights of ComikLayers represent the anchor points, i.e. representative real-valued
-    graph signal representation, and each layer has a graph Laplacian as a parameter. 
-    The anchor points are optimized with back-propagation and the graph Laplacian is 
+    graph signal representation, and each layer has a graph Laplacian as a parameter.
+    The anchor points are optimized with back-propagation and the graph Laplacian is
     optimized in a second step by solving the optimization problem of the specified graph
     learning framework.
     """
@@ -80,19 +84,19 @@ class ComikLayer(torch.nn.Module):
         Parameters
         ----------
         num_nodes : int
-            Number of nodes in the graph. Since this layer is designed to get 
-            graph signal reprentations as input, num_nodes is equivalent to the 
+            Number of nodes in the graph. Since this layer is designed to get
+            graph signal reprentations as input, num_nodes is equivalent to the
             dimensionality of inputs.
         num_anchors : int
-            Number of anchor points of the layer. 
+            Number of anchor points of the layer.
         graph_learner : str
             Framework that will be used to learn a graph from the optimized
-            anchor points. The framework is called after every optimization step, 
+            anchor points. The framework is called after every optimization step,
             i.e. everytime the anchor points changed.
         graph_learner_params : Dictionary
             Dictionary to provide parameter settings for the graph learning framework.
             Available parameters for each framework can be found in the corresponding
-            doc strings. If no dictionary is provided, the default parameters will be 
+            doc strings. If no dictionary is provided, the default parameters will be
             used. The dictionary has to be of the form {'param_name': param_value}.
         """
 
@@ -107,12 +111,17 @@ class ComikLayer(torch.nn.Module):
         #   -> the Laplacian and the linear transformation matrix used in the Nyström
         #      approximation will NOT be optimized using gradients, hence, we do not
         #      calculate gradients for the Laplacian or linear transformation matrix
+        #
+        #   -> the anchor points will be initialized with random values; to initialize
+        #      anchor points with clustering one have to call the init_weights method
+        #      with appropriate parameters
         self._need_lintrans_computed = True
         self.register_buffer("lintrans", torch.Tensor(num_anchors, num_anchors))
         self.register_buffer("L", torch.Tensor(num_nodes, num_nodes))
         self.register_parameter(
             "weight", torch.nn.Parameter(torch.Tensor(num_anchors, num_nodes))
         )
+        self.init_weights()
 
         # initialize the graph learning framework
         gl_framework = graph_learners[graph_learner]
@@ -133,13 +142,75 @@ class ComikLayer(torch.nn.Module):
         """
         self.train(False)
 
+    def init_weights(
+        self,
+        random_init: bool = True,
+        data: torch.Tensor = None,
+        distance: str = "euclidian",
+        max_iters: int = 100,
+        verbose: bool = True,
+        init: str = None,
+        tol: float = 1e-4,
+        use_cuda: bool = False,
+    ):
+        """Method to initialize the anchor points
+        
+        This function either uses the kaiming routine to initialize the anchor
+        points with uniformly distributed random values or takes a set of
+        real-valued graph signal representations and performs K-Means clustering
+        to calculate n cluster centers, where n is equal to self.num_anchors.
+        Afterwards, The anchor point will be initialized with the cluster centers.
+
+        Parameters
+        ----------
+        random_init : bool
+            Flag that indicates how the anchor points should be initialized.
+            Defaults to True.
+        data : Tensor
+            Data that will be used for clustering provided as a tensor of shape
+            (n_samples x n_dimensions).
+        distance : str
+            Distance measure used for clustering. Defaults to 'euclidean'.
+        max_iters : int
+            Maximal number of iterations used in the K-Means clustering. Defaults to 100.
+        verbose : bool
+            Flag to activate verbose output. Defaults to True.
+        init : str
+            Initialization process for the K-Means algorithm. Defaults to None.
+        tol : float
+            Relative tolerance with regards to Frobenius norm of the difference in the cluster
+            centers of two consecutive iterations to declare convergence. It's not advised to set
+            `tol=0` since convergence might never be declared due to rounding errors. Use a very
+            small number instead. Defaults to 1e-4.
+        use_cuda : bool
+            Determine whether to utilize GPU resources or compute kmeans on CPU resources. If set to
+            False, scikit-learn's implementation of kmeans will be used. Defaults to False.
+        """
+
+        if random_init:
+            kaiming_uniform_(self.weight, a=math.sqrt(5))
+
+        else:
+            cluster_centers = kmeans(
+                data,
+                n_clusters=self.num_anchors,
+                distance=distance,
+                max_iters=max_iters,
+                verbose=verbose,
+                init=init,
+                tol=tol,
+                use_cuda=use_cuda,
+            )
+
+            self.weight.data = cluster_centers
+
     def forward(self, x_in):
         """Definition of the computation performed on every call
 
         Parameters
         ----------
         x_in : Tensor
-            Tensor containing a batch of graph signal representations. This tensor has to 
+            Tensor containing a batch of graph signal representations. This tensor has to
             be of shape (batch_size x num_nodes).
         """
         # evaluate the kernel function between the inputs and anchor points
@@ -158,7 +229,7 @@ class ComikLayer(torch.nn.Module):
         Parameters
         ----------
         x_in : Tensor
-            Tensor containing a batch of graph signal representations. This tensor has to 
+            Tensor containing a batch of graph signal representations. This tensor has to
             be of shape (batch_size x num_nodes).
 
         Returns
@@ -177,7 +248,7 @@ class ComikLayer(torch.nn.Module):
         Returns
         -------
         lintrans : Tensor
-            Returns the linear transformation factor needed for the Nyström method as a tensor 
+            Returns the linear transformation factor needed for the Nyström method as a tensor
             of shape (num_anchor x num_anchor)
         """
         # return the current linear transformation matrix, if there is no need to calculate
