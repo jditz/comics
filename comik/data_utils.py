@@ -24,6 +24,11 @@ class OmicsDataset(data.Dataset):
         List containing all features
     labels : list
         List containing all labels
+    nb_features : int
+        Number of features each sample consists of
+    nb_classes : int
+        Number of classes, i.e. number of different labels, in the dataset. This number will 
+        be one for regression and can be one for binary classification.
     """
 
     def __init__(
