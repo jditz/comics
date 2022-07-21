@@ -8,7 +8,7 @@ data given sample observations from these variables
 import time
 
 import numpy as np
-from pyunlocbox import functions, solvers
+from pyunlocbox import acceleration, functions, solvers
 from scipy import sparse, spatial
 from sklearn.covariance import graphical_lasso
 
@@ -65,7 +65,7 @@ def log_degree_barrier(
     maxit=1000,
     rtol=1e-5,
     retall=False,
-    verbosity="NONE",
+    verbosity="ALL",
 ):
     r"""
     Learn graph by imposing a log barrier on the degrees
@@ -154,8 +154,14 @@ def log_degree_barrier(
     # Rescale stepsize
     stepsize = step / (1 + lipg + norm_K)
 
+    # use acceleration for large graphs
+    if N > 1000:
+        accel = acceleration.fista()
+    else:
+        accel = None
+
     # Solve problem
-    solver = solvers.mlfbf(L=K, Lt=Kt, step=stepsize)
+    solver = solvers.mlfbf(L=K, Lt=Kt, step=stepsize, accel=accel)
     problem = solvers.solve(
         [f1, f2, f3], x0=w0, solver=solver, maxit=maxit, rtol=rtol, verbosity=verbosity
     )
@@ -179,7 +185,7 @@ def l2_degree_reg(
     maxit=1000,
     rtol=1e-5,
     retall=False,
-    verbosity="NONE",
+    verbosity="ALL",
 ):
     r"""
     Learn graph by regularizing the l2-norm of the degrees.
@@ -279,8 +285,14 @@ def l2_degree_reg(
     # Rescale stepsize
     stepsize = step / (1 + lipg + norm_K)
 
+    # use acceleration for large graphs
+    if N > 1000:
+        accel = acceleration.fista()
+    else:
+        accel = None
+
     # Solve problem
-    solver = solvers.mlfbf(L=K, Lt=Kt, step=stepsize)
+    solver = solvers.mlfbf(L=K, Lt=Kt, step=stepsize, accel=accel)
     problem = solvers.solve(
         [f1, f2, f3], x0=w0, solver=solver, maxit=maxit, rtol=rtol, verbosity=verbosity
     )
@@ -294,7 +306,7 @@ def l2_degree_reg(
         return W
 
 
-def glasso(X, alpha=1, w0=None, maxit=1000, rtol=1e-5, retall=False, verbosity="NONE"):
+def glasso(X, alpha=1, w0=None, maxit=1000, rtol=1e-5, retall=False, verbosity="ALL"):
     r"""
     Learn graph by imposing promoting sparsity in the inverse covariance.
     This is done by solving

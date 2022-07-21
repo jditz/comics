@@ -38,6 +38,7 @@ class OmicsDataset(data.Dataset):
         separator: str = ",",
         num_classes: int = 1,
         class_labels=None,
+        raise_unequal_sample_count: bool = True,
     ):
         r"""Constructor of the OmicsDataset class
 
@@ -60,6 +61,10 @@ class OmicsDataset(data.Dataset):
             classification, only the positive label should be given. If a regression
             problem has to be solved, set the num_classes parameter to 1 and the
             class_labels parameter to None.
+        raise_unequal_sample_count : bool
+            If this flag is set to true, an exception is raised if data file and label
+            file contain unequal number of samples. Otherwise, the class will include only
+            samples with ids that occure in both, data file and label file.
         """
 
         # read in the data file
@@ -71,6 +76,8 @@ class OmicsDataset(data.Dataset):
                 # the line will contain the sample ids, if it is the first line
                 if idx == 0:
                     for sample in linelist:
+                        # remove possible unneccessary characters from the id strings
+                        sample = sample.strip(" \"'")
                         features.append((sample, []))
 
                 # each line after the first will contain the value of one feature
@@ -79,7 +86,7 @@ class OmicsDataset(data.Dataset):
                         # skip the first entry since it will contain the id of the feature
                         if idx2 == 0:
                             continue
-                        features[idx2 - 1][1].append(sample)
+                        features[idx2 - 1][1].append(float(sample))
 
         # read in the labels file
         labels = []
@@ -91,11 +98,22 @@ class OmicsDataset(data.Dataset):
         # report an error if the number of samples in the data file does not
         # match the number of samples in the label file
         if len(features) != len(labels):
-            raise ValueError(
-                "Unequal number of samples in data and label file detected!\n"
-                + f"    data file contains {len(features)} samples\n"
-                + f"    label file contains {len(labels)} samples\n"
-            )
+            if raise_unequal_sample_count:
+                raise ValueError(
+                    "Unequal number of samples in data and label file detected!\n"
+                    + f"    data file contains {len(features)} samples\n"
+                    + f"    label file contains {len(labels)} samples\n"
+                )
+            else:
+                # determine the sample ids that are in both, the data file and
+                # the label file
+                features_ids = set([x[0] for x in features])
+                labels_ids = set([x[0] for x in labels])
+                common_ids = features_ids.intersection(labels_ids)
+
+                # remove all samples that are not in both files
+                features = [x for x in features if x[0] in common_ids]
+                labels = [x for x in labels if x[0] in common_ids]
 
         # make sure that all samples have the same amount of features
         ref_len = len(features[0][1])
@@ -155,7 +173,7 @@ class OmicsDataset(data.Dataset):
         """
         # retrieve the requested data
         features = torch.Tensor(self.nb_features)
-        features.data = self.data[idx]
+        features.data = torch.tensor(self.data[idx])
 
         # retrieve the requested label
         if self.class_to_idx == None:

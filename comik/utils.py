@@ -341,8 +341,27 @@ def sample_data(
 
         # update the samples Tensor with the current batch of sampled data points
         samples[already_sampled : already_sampled + current_size] = current_samples
-        already_samples += current_size
+        already_sampled += current_size
 
     # return the sampled data points
-    print(f"sample_data rounting returned {already_sampled} sampled data points")
+    print(f"sample_data routine returned {already_sampled} sampled data points")
     return samples[:already_sampled, :]
+
+
+def category_from_output(output):
+    """This auxiliary function returns the class with highest probability from
+    the CON output.
+
+    Parameters
+    ----------
+    output : Tensor
+        Output of a PyTorch model.
+    
+    Returns
+    -------
+    category_i : int
+        Index of the category with the highest probability.
+    """
+    top_n, top_i = output.topk(1)
+    category_i = top_i[0].item()
+    return category_i

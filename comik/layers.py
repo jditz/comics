@@ -61,11 +61,11 @@ def matrix_inverse_sqrt(input, eps=1e-2):
     return MatrixInverseSqrt.apply(input, eps)
 
 
-class ComikLayer(torch.nn.Module):
+class LaplaceLayer(torch.nn.Module):
     r"""Convolutional Graph Kernel Layer
 
-    This layer implements a convolutional graph kernel layer as described in the paper.
-    The weights of ComikLayers represent the anchor points, i.e. representative real-valued
+    This layer implements a convolutional graph kernel layer that uses a single graph Laplacian.
+    The weights of LaplaceLayers represent the anchor points, i.e. representative real-valued
     graph signal representation, and each layer has a graph Laplacian as a parameter.
     The anchor points are optimized with back-propagation and the graph Laplacian is
     optimized in a second step by solving the optimization problem of the specified graph
@@ -121,7 +121,7 @@ class ComikLayer(torch.nn.Module):
         self.register_parameter(
             "weight", torch.nn.Parameter(torch.Tensor(num_anchors, num_nodes))
         )
-        self.init_weights()
+        self.init_params()
 
         # initialize the graph learning framework
         gl_framework = graph_learners[graph_learner]
@@ -142,7 +142,7 @@ class ComikLayer(torch.nn.Module):
         """
         self.train(False)
 
-    def init_weights(
+    def init_params(
         self,
         random_init: bool = True,
         data: torch.Tensor = None,
@@ -153,13 +153,15 @@ class ComikLayer(torch.nn.Module):
         tol: float = 1e-4,
         use_cuda: bool = False,
     ):
-        """Method to initialize the anchor points
+        """Method to initialize the anchor points and graph Laplacian
         
         This function either uses the kaiming routine to initialize the anchor
         points with uniformly distributed random values or takes a set of
         real-valued graph signal representations and performs K-Means clustering
         to calculate n cluster centers, where n is equal to self.num_anchors.
         Afterwards, The anchor point will be initialized with the cluster centers.
+        With the now initialized anchor points, an initial graph Laplacian will be
+        learned.
 
         Parameters
         ----------
@@ -189,6 +191,7 @@ class ComikLayer(torch.nn.Module):
 
         if random_init:
             kaiming_uniform_(self.weight, a=math.sqrt(5))
+            kaiming_uniform_(self.L, a=math.sqrt(5))
 
         else:
             cluster_centers = kmeans(
@@ -204,6 +207,8 @@ class ComikLayer(torch.nn.Module):
 
             self.weight.data = cluster_centers
 
+            self.learn_graph()
+
     def forward(self, x_in):
         """Definition of the computation performed on every call
 
@@ -215,6 +220,7 @@ class ComikLayer(torch.nn.Module):
         """
         # evaluate the kernel function between the inputs and anchor points
         x_out = self._kernel_func(x_in)
+        print(x_out.shape)
 
         # calculate the linear transformation factor (if needed)
         lintrans = self._compute_lintrans()
@@ -288,7 +294,7 @@ class ComikLayer(torch.nn.Module):
             Tensor containing the projections of each input onto the subspace. The shape
             of the tensor is (batch_size x num_anchors)
         """
-        batch_size, _, _ = x_in.size()
+        batch_size, _ = x_in.size()
 
         # calculate normal matrix multiplication or batch matrix multiplication depending on whether input data is
         # presented in batch mode
@@ -302,11 +308,69 @@ class ComikLayer(torch.nn.Module):
         """Function to update the graph Laplacian given the current set of anchor points
         """
         # call the chosen graph learning framework with the current set of anchor points
-        W = self.graph_learner(self.weight.t().detach().cpu().numpy())
+        aux_weights = self.weight.t().detach().cpu().numpy()
+        print(aux_weights.shape, aux_weights.dtype)
+        W = self.graph_learner(aux_weights)
 
         # calculate the degree matrix D = diag(W1) with 1 = [1, ..., 1]^T
         D = np.diag(np.matmul(W, np.ones(self.num_nodes)))
 
         # calculate the fraph Laplacian L = D - W
         self.L.data = D - W
+
+
+class PIMKLLayer(torch.nn.Module):
+    """This layer implements the pathway-induced multiple kernel learning
+    (PIMKL) as proposed by Manica et al, 2019. Predefined Laplacians for selected
+    pathways are used to learn a subspace of the RKHS spanned by these Laplacians
+    and real-valued graph signal representations.
+    """
+
+    def __init__(self, num_anchors: int, pi_laplacians: list):
+        """Constructor of the PIMKLLayer class.
+
+        Parameters
+        ----------
+        num_anchors : int
+            Integer that determines the number of anchor poins that will be learned
+            for each pathway_induced kernel.
+        pi_laplacians : list
+            List of tuples that contain the information about the pathway-induced kernels.
+            The first entry of each tuple contains the indices of the parts of inputs that
+            are used for the kernel. the second entry contains the Laplacian matrix of
+            the kernel.
+        """
+        # call constructor of parent class
+        super().__init__()
+
+        # store attributes
+        self.num_kernels = len(pi_laplacians)
+        self.num_anchors = num_anchors
+
+        # register parameters and buffers for the kernels
+        self.anchors = torch.nn.ParameterList()
+        self.laplacians = []
+        self.lintrans = []
+        self.indices = []
+        for i, pil in enumerate(pi_laplacians):
+
+            # create the anchor points for the current kernel
+            #   -> the dimensionality is given by the number of indices used for the
+            #      current kernel
+            self.anchors.append(torch.Tensor(num_anchors, len(pil[0])))
+
+            # register the current Laplacian as a buffer
+            self.register_buffer(f"laplacian_{i}", pil[1])
+            self.laplacians.append(getattr(self, f"laplacian_{i}"))
+
+            # register a buffer for the linear transformation matrix of the current
+            # kernel
+            self.register_buffer(
+                f"lintrans_{i}", torch.Tensor(num_anchors, num_anchors)
+            )
+            self.lintrans.append(getattr(self, f"lintrans_{i}"))
+
+            # register the indices of the current kernel as a buffer
+            self.register_buffer(f"indices_{i}", torch.Tensor(pil[0]))
+            self.indices.append(getattr(self, f"indices_{i}"))
 
