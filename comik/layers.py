@@ -131,14 +131,14 @@ class LaplaceLayer(torch.nn.Module):
             self.graph_learner = lambda x: gl_framework(x, **graph_learner_params)
 
     def train(self, mode=True):
-        """Toggle between training (mode = True) and evaluation mode (mode = False)
+        r"""Toggle between training (mode = True) and evaluation mode (mode = False)
         """
-        super(ComikLayer, self).train(mode)
+        super().train(mode)
         if self.training is True:
             self._need_lintrans_computed = True
 
     def eval(self):
-        """Sets model in evaluation mode
+        r"""Sets model in evaluation mode
         """
         self.train(False)
 
@@ -153,7 +153,7 @@ class LaplaceLayer(torch.nn.Module):
         tol: float = 1e-4,
         use_cuda: bool = False,
     ):
-        """Method to initialize the anchor points and graph Laplacian
+        r"""Method to initialize the anchor points and graph Laplacian
         
         This function either uses the kaiming routine to initialize the anchor
         points with uniformly distributed random values or takes a set of
@@ -210,7 +210,7 @@ class LaplaceLayer(torch.nn.Module):
             self.learn_graph()
 
     def forward(self, x_in):
-        """Definition of the computation performed on every call
+        r"""Definition of the computation performed on every call
 
         Parameters
         ----------
@@ -230,7 +230,7 @@ class LaplaceLayer(torch.nn.Module):
         return x_out
 
     def _kernel_func(self, x_in):
-        """Evaluation of the kernel function between each input and each anchor point
+        r"""Evaluation of the kernel function between each input and each anchor point
 
         Parameters
         ----------
@@ -249,7 +249,7 @@ class LaplaceLayer(torch.nn.Module):
         return x_out
 
     def _compute_lintrans(self):
-        """Compute the linear transformation factor K_(ZZ)^(-1/2)
+        r"""Compute the linear transformation factor K_(ZZ)^(-1/2)
 
         Returns
         -------
@@ -275,7 +275,7 @@ class LaplaceLayer(torch.nn.Module):
         return lintrans
 
     def _project_onto_subspace(self, x_in, lintrans):
-        """Projection of inputs onto the RKHS subspace that is spanned by the
+        r"""Projection of inputs onto the RKHS subspace that is spanned by the
         anchor points
 
         Parameters
@@ -305,7 +305,7 @@ class LaplaceLayer(torch.nn.Module):
         )
 
     def learn_graph(self):
-        """Function to update the graph Laplacian given the current set of anchor points
+        r"""Function to update the graph Laplacian given the current set of anchor points
         """
         # call the chosen graph learning framework with the current set of anchor points
         aux_weights = self.weight.t().detach().cpu().numpy()
@@ -320,14 +320,14 @@ class LaplaceLayer(torch.nn.Module):
 
 
 class PIMKLLayer(torch.nn.Module):
-    """This layer implements the pathway-induced multiple kernel learning
+    r"""This layer implements the pathway-induced multiple kernel learning
     (PIMKL) as proposed by Manica et al, 2019. Predefined Laplacians for selected
     pathways are used to learn a subspace of the RKHS spanned by these Laplacians
     and real-valued graph signal representations.
     """
 
     def __init__(self, num_anchors: int, pi_laplacians: list):
-        """Constructor of the PIMKLLayer class.
+        r"""Constructor of the PIMKLLayer class.
 
         Parameters
         ----------
@@ -346,6 +346,7 @@ class PIMKLLayer(torch.nn.Module):
         # store attributes
         self.num_kernels = len(pi_laplacians)
         self.num_anchors = num_anchors
+        self._need_lintrans_computed = True
 
         # register parameters and buffers for the kernels
         self.anchors = torch.nn.ParameterList()
@@ -374,3 +375,202 @@ class PIMKLLayer(torch.nn.Module):
             self.register_buffer(f"indices_{i}", torch.Tensor(pil[0]))
             self.indices.append(getattr(self, f"indices_{i}"))
 
+        # initialize anchord with random values
+        self.init_params()
+
+    def train(self, mode=True):
+        r"""Toggle between training (mode = True) and evaluation mode (mode = False)
+        """
+        super().train(mode)
+        if self.training is True:
+            self._need_lintrans_computed = True
+
+    def eval(self):
+        r"""Sets model in evaluation mode
+        """
+        self.train(False)
+
+    def init_params(
+        self,
+        random_init: bool = True,
+        data: torch.Tensor = None,
+        distance: str = "euclidian",
+        max_iters: int = 100,
+        verbose: bool = True,
+        init: str = None,
+        tol: float = 1e-4,
+        use_cuda: bool = False,
+    ):
+        r"""Method to initialize the anchor points
+        
+        This function either uses the kaiming routine to initialize the anchor
+        points with uniformly distributed random values or takes a set of
+        real-valued graph signal representations and performs K-Means clustering
+        to calculate n cluster centers, where n is equal to self.num_anchors.
+
+        Parameters
+        ----------
+        random_init : bool
+            Flag that indicates how the anchor points should be initialized.
+            Defaults to True.
+        data : Tensor
+            Data that will be used for clustering provided as a tensor of shape
+            (n_samples x n_dimensions).
+        distance : str
+            Distance measure used for clustering. Defaults to 'euclidean'.
+        max_iters : int
+            Maximal number of iterations used in the K-Means clustering. Defaults to 100.
+        verbose : bool
+            Flag to activate verbose output. Defaults to True.
+        init : str
+            Initialization process for the K-Means algorithm. Defaults to None.
+        tol : float
+            Relative tolerance with regards to Frobenius norm of the difference in the cluster
+            centers of two consecutive iterations to declare convergence. It's not advised to set
+            `tol=0` since convergence might never be declared due to rounding errors. Use a very
+            small number instead. Defaults to 1e-4.
+        use_cuda : bool
+            Determine whether to utilize GPU resources or compute kmeans on CPU resources. If set to
+            False, scikit-learn's implementation of kmeans will be used. Defaults to False.
+        """
+
+        if random_init:
+            for i in range(self.num_kernels):
+                kaiming_uniform_(self.anchors[i], a=math.sqrt(5))
+
+        else:
+            for i in range(self.num_kernels):
+                # select the dimensions used for the current kernel
+                cluster_data = data[:, self.indices[i]]
+
+                # calculate cluster centers using k-means
+                cluster_centers = kmeans(
+                    cluster_data,
+                    n_clusters=self.num_anchors,
+                    distance=distance,
+                    max_iters=max_iters,
+                    verbose=verbose,
+                    init=init,
+                    tol=tol,
+                    use_cuda=use_cuda,
+                )
+
+                # update the anchors using the cluster centers
+                self.anchors[i].data = cluster_centers
+
+    def forward(self, x_in):
+        r"""Definition of the computation performed on every call
+
+        Parameters
+        ----------
+        x_in : Tensor
+            Tensor containing a batch of graph signal representations. This tensor has to
+            be of shape (batch_size x num_nodes).
+        """
+        concat_out = []
+
+        # perform forward pass for all pathway-induced kernels
+        for i in range(self.num_kernels):
+            # select the input dimensions that will be used for the current kernel
+            x_out = x_in[:, self.indices[i]]
+
+            # evaluate the kernel function between the inputs and anchor points
+            x_out = self._kernel_func(x_in, i)
+
+            # calculate the linear transformation factor (if needed)
+            lintrans = self._compute_lintrans(i)
+
+            # project each input onto the RKHS' subspace
+            x_out = self._project_onto_subspace(x_out, lintrans)
+
+            # append output to list
+            concat_out.append(x_out)
+
+        # concatenate the outputs of each kernel
+        x_out = torch.cat(concat_out, dim=1)
+
+        return x_out
+
+    def _kernel_func(self, x_in, kernel_idx: int):
+        r"""Evaluation of the kernel function between each input and each anchor point
+
+        Parameters
+        ----------
+        x_in : Tensor
+            Tensor containing a batch of graph signal representations. This tensor has to
+            be of shape (batch_size x num_nodes).
+        kernel_idx : int
+            Index of the kernel that will be used on x_in.
+
+        Returns
+        -------
+        x_out : Tensor
+            Matrix containing the kernel evaluation between each input and each anchor point.
+            The tensor is of shape (batch_size x num_anchors)
+        """
+        # evaluate the kernel function xLy for each input-anchor pair
+        x_out = torch.mm(
+            torch.mm(x_in, self.laplacians[kernel_idx]), self.anchors[kernel_idx].t()
+        )
+        return x_out
+
+    def _compute_lintrans(self, kernel_idx: int):
+        r"""Compute the linear transformation factor K_(ZZ)^(-1/2)
+
+        Parameters
+        ----------
+        kernel_idx : int
+            Index of the kernel that will be used on x_in.
+
+        Returns
+        -------
+        lintrans : Tensor
+            Returns the linear transformation factor needed for the Nyström method as a tensor
+            of shape (num_anchor x num_anchor)
+        """
+        # return the current linear transformation matrix, if there is no need to calculate
+        # a new matrix
+        if not self._need_lintrans_computed:
+            return self.lintrans[kernel_idx]
+
+        # calculate the new linear transformation matrix using the current anchor points
+        lintrans = self._kernel_func(self.anchors[kernel_idx], kernel_idx)
+        lintrans = matrix_inverse_sqrt(lintrans)
+
+        # if model is in evaluation mode, do not recompute linear transformation matrix
+        if not self.training:
+            self._need_lintrans_computed = False
+            self.lintrans[kernel_idx].data = lintrans.data
+
+        # return the linear transformation matrix
+        return lintrans
+
+    def _project_onto_subspace(self, x_in, lintrans):
+        r"""Projection of inputs onto the RKHS subspace that is spanned by the
+        anchor points
+
+        Parameters
+        ----------
+        x_in : Tensor
+            Result of the kernel evaluation between each input and each anchor point.
+            Tensor has to be of shape (batch_size x num_anchors)
+        lintrans: Tensor
+            Linear transformation matrix to project each input onto the RKHS subspace
+            that is spanned by the anchor points. Tensor has to be of shape
+            (num_anchors x num_anchors)
+
+        Returns
+        -------
+        x_out : Tensor
+            Tensor containing the projections of each input onto the subspace. The shape
+            of the tensor is (batch_size x num_anchors)
+        """
+        batch_size, _ = x_in.size()
+
+        # calculate normal matrix multiplication or batch matrix multiplication depending on whether input data is
+        # presented in batch mode
+        if x_in.dim() == 2:
+            return torch.mm(x_in, lintrans)
+        return torch.bmm(
+            lintrans.expand(batch_size, self.num_anchors, self.num_anchors), x_in
+        )
