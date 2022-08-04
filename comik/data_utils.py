@@ -125,8 +125,8 @@ class OmicsDataset(data.Dataset):
         labels.sort(key=lambda x: x[0])
 
         # prepare the data and labels attributes of the class
-        self.nb_features = len(features[0][1])
-        self.nb_classes = num_classes
+        self.num_features = len(features[0][1])
+        self.num_classes = num_classes
         self.sample_ids = []
         self.data = []
         self.labels = []
@@ -172,14 +172,14 @@ class OmicsDataset(data.Dataset):
                 Tensor containing the label of the requested sample
         """
         # retrieve the requested data
-        features = torch.Tensor(self.nb_features)
+        features = torch.Tensor(self.num_features)
         features.data = torch.tensor(self.data[idx])
 
         # retrieve the requested label
         if self.class_to_idx == None:
             label = torch.Tensor(float(self.labels[idx]))
         elif isinstance(self.class_to_idx, dict):
-            label = torch.zeros(self.nb_classes)
+            label = torch.zeros(self.num_classes)
             label[self.class_to_idx[self.labels[idx]]] = 1
         else:
             if self.labels[idx] == self.class_to_idx:

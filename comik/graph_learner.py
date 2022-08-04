@@ -65,7 +65,7 @@ def log_degree_barrier(
     maxit=1000,
     rtol=1e-5,
     retall=False,
-    verbosity="ALL",
+    verbosity="NONE",
 ):
     r"""
     Learn graph by imposing a log barrier on the degrees
@@ -185,7 +185,7 @@ def l2_degree_reg(
     maxit=1000,
     rtol=1e-5,
     retall=False,
-    verbosity="ALL",
+    verbosity="NONE",
 ):
     r"""
     Learn graph by regularizing the l2-norm of the degrees.
@@ -306,7 +306,7 @@ def l2_degree_reg(
         return W
 
 
-def glasso(X, alpha=1, w0=None, maxit=1000, rtol=1e-5, retall=False, verbosity="ALL"):
+def glasso(X, alpha=1, w0=None, maxit=1000, rtol=1e-5, retall=False, verbosity="NONE"):
     r"""
     Learn graph by imposing promoting sparsity in the inverse covariance.
     This is done by solving

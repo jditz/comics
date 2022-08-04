@@ -3,8 +3,19 @@ package.
 """
 
 import numpy as np
+import pandas as pd
 import torch
+from scipy import stats
 from sklearn.cluster import KMeans
+from sklearn.metrics import (
+    accuracy_score,
+    average_precision_score,
+    f1_score,
+    log_loss,
+    matthews_corrcoef,
+    precision_recall_curve,
+    roc_auc_score,
+)
 
 
 def _init_kmeans(
@@ -349,8 +360,8 @@ def sample_data(
 
 
 def category_from_output(output):
-    """This auxiliary function returns the class with highest probability from
-    the CON output.
+    r"""This auxiliary function returns the class with highest probability from
+    a network's output.
 
     Parameters
     ----------
@@ -365,3 +376,74 @@ def category_from_output(output):
     top_n, top_i = output.topk(1)
     category_i = top_i[0].item()
     return category_i
+
+
+def recall_at_fdr(y_true, y_score, fdr_cutoff=0.05):
+    r"""Compute recall at certain false discovery rate cutoffs
+    """
+    # convert y_true and y_score into desired format
+    #   -> both have to be lists of shape [nb_samples]
+    if len(y_true.shape) > 1:
+        y_true_new = y_true.argmax(axis=1)
+    else:
+        y_true_new = y_true
+    if len(y_score.shape) > 1:
+        y_score_new = [y_score[j][i] for j, i in enumerate(y_true_new)]
+    else:
+        y_score_new = y_score
+    precision, recall, _ = precision_recall_curve(y_true_new, y_score_new)
+    fdr = 1 - precision
+    cutoff_index = next(i for i, x in enumerate(fdr) if x <= fdr_cutoff)
+    return recall[cutoff_index]
+
+
+def compute_metrics_classification(y_true, y_pred):
+    r"""Compute standard performance metrics for predictions of a trained model.
+    Args:
+        y_true (Tensor): True label for each sample provided as a tensor of shape (n_sample x n_classes).
+        y_pred (Tensor): Predicted label for each sample provided as a tensor of shape (n_samples x n_classes).
+    Returns:
+        Different performance metrics for the provided predictions as a Pandas DataFrame.
+    """
+    y_true, y_pred = np.asarray(y_true), np.asarray(y_pred)
+
+    metric = {}
+    metric["log.loss"] = log_loss(y_true, y_pred)
+    metric["accuracy"] = accuracy_score(y_true, y_pred > 0.5)
+
+    # check for multiclass classification
+    if len(y_true.shape) > 1 and len(y_pred.shape) > 1:
+        metric["F_score"] = f1_score(y_true.argmax(axis=1), y_pred.argmax(axis=1))
+        metric["MCC"] = matthews_corrcoef(y_true.argmax(axis=1), y_pred.argmax(axis=1))
+    else:
+        metric["F_score"] = f1_score(y_true, y_pred > 0.5)
+        metric["MCC"] = matthews_corrcoef(y_true, y_pred > 0.5)
+
+    metric["auROC"] = roc_auc_score(y_true, y_pred)
+    metric["auROC50"] = roc_auc_score(y_true, y_pred, max_fpr=0.5)
+    metric["auPRC"] = average_precision_score(y_true, y_pred)
+    metric["recall_at_10_fdr"] = recall_at_fdr(y_true, y_pred, 0.10)
+    metric["recall_at_5_fdr"] = recall_at_fdr(y_true, y_pred, 0.05)
+    metric["pearson.r"], metric["pearson.p"] = stats.pearsonr(
+        y_true.ravel(), y_pred.ravel()
+    )
+    metric["spearman.r"], metric["spearman.p"] = stats.spearmanr(
+        y_true, y_pred, axis=None
+    )
+
+    df_metric = pd.DataFrame.from_dict(metric, orient="index")
+    df_metric.columns = ["value"]
+    df_metric.sort_index(inplace=True)
+
+    return df_metric
+
+
+def compute_metrics_regression(y_true, y_pred):
+    r"""Compute standard regression performance metrics for predictions of a trained model.
+    Args:
+        y_true (Tensor): True value for each sample provided as a tensor of shape (n_sample).
+        y_pred (Tensor): Predicted value for each sample provided as a tensor of shape (n_samples).
+    Returns:
+        Different performance metrics for the provided predictions as a Pandas DataFrame.
+    """
+    pass
