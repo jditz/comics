@@ -42,7 +42,7 @@ class GLKNet(nn.Module):
             Framework that will be used to learn a graph from the optimized
             anchor points. The framework is called after every optimization step,
             i.e. everytime the anchor points changed.
-        graph_learner_params : Dictionary
+        gl_params : dict
             Dictionary to provide parameter settings for the graph learning framework.
             Available parameters for each framework can be found in the corresponding
             doc strings. If no dictionary is provided, the default parameters will be
@@ -790,7 +790,7 @@ class GLPIMKLNet(nn.Module):
             Framework that will be used to learn a graph from the optimized
             anchor points. The framework is called after every optimization step,
             i.e. everytime the anchor points changed.
-        gl_params : Dictionary
+        gl_params : dict
             Dictionary to provide parameter settings for the graph learning framework.
             Available parameters for each framework can be found in the corresponding
             doc strings. If no dictionary is provided, the default parameters will be
@@ -1016,7 +1016,9 @@ class GLPIMKLNet(nn.Module):
                             else:
                                 loss = criterion(output, label)
                     else:
+                        tic_for = timer()
                         output = self(data)
+                        toc_for = timer()
 
                         # create prediction tensor
                         pred = label.new_zeros(output.shape)
@@ -1034,9 +1036,11 @@ class GLPIMKLNet(nn.Module):
 
                     # backward propagate + optimize only if in training phase
                     if phase == "train":
+                        tic_back = timer()
                         loss.backward()
                         # torch.nn.utils.clip_grad_norm_(self.parameters(), 0.5)
                         optimizer.step()
+                        toc_back = timer()
 
                         # learn the new Laplacians from the anchor points
                         tic_graph = timer()
@@ -1074,8 +1078,11 @@ class GLPIMKLNet(nn.Module):
 
             toc = timer()
             print(
-                "Finished, elapsed time: {:.2f}min ({:.2}min for graph learning)\n".format(
-                    (toc - tic) / 60, (toc_graph - tic_graph) / 60
+                "Finished, elapsed time: {:.2f}min ({:.2}min forward, {:.2}min backward/optim, {:.2}min graph learning)\n".format(
+                    (toc - tic) / 60,
+                    (toc_for - tic_for) / 60,
+                    (toc_back - tic_back) / 60,
+                    (toc_graph - tic_graph) / 60,
                 )
             )
 
