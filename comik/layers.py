@@ -7,6 +7,7 @@ from typing import Union
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch.nn.init import kaiming_uniform_
 
 from .graph_learner import graph_learners
@@ -60,6 +61,99 @@ class MatrixInverseSqrt(torch.autograd.Function):
 def matrix_inverse_sqrt(input, eps=1e-2):
     r"""Wrapper for MatrixInverseSqrt"""
     return MatrixInverseSqrt.apply(input, eps)
+
+
+class AttentionLayer(torch.nn.Module):
+    r"""Attention-based Multiple Instance Layer
+
+    This class implements the attention-based multiple instance learning layer.
+    """
+
+    def __init__(
+        self, dim_in: int, dim_attention: int, num_attention_weigths: int
+    ) -> None:
+        r"""Constructor of the AttentionLayer class
+
+        Parameters
+        ----------
+        dim_in : int
+            Dimensionality of the input to the attention layer.
+        dim_attention : int
+            Dimensionality of the first parameter of the attention layer.
+        num_attention_weights : int
+            Number of attention weights assigned to each instance.
+        """
+        super().__init__()
+
+        # define the attention layer
+        self.attention = torch.nn.Sequential(
+            torch.nn.Linear(dim_in, dim_attention),
+            torch.nn.Tanh(),
+            torch.nn.Linear(dim_attention, num_attention_weigths),
+        )
+
+    def forward(self, x_in):
+        r"""Forward pass through the attention layer.
+        """
+        # calculate the attention weights for each bag embedding
+        A = self.attention(x_in)
+        A = torch.transpose(A, 2, 1)
+        A = F.softmax(A, dim=2)
+
+        # multiply each bag with its corresponding weight
+        M = torch.bmm(A, x_in)
+
+        return M
+
+
+class GatedAttentionLayer(torch.nn.Module):
+    r"""Gated attention-based Multiple Instance Layer
+
+    This class implements the gated attention-based multiple instance learning layer.
+    In this implementation, the parameters U and V use the same dimensions.
+    """
+
+    def __init__(
+        self, dim_in: int, dim_attention: int, num_attention_weigths: int
+    ) -> None:
+        r"""Constructor of the GatedAttentionLayer class
+
+        Parameters
+        ----------
+        dim_in : int
+            Dimensionality of the input to the attention layer.
+        dim_attention : int
+            Dimensionality of the first parameter of the attention layer.
+        num_attention_weights : int
+            Number of attention weights assigned to each instance.
+        """
+        super().__init__()
+
+        # define the attention layers
+        self.attention_v = torch.nn.Sequential(
+            torch.nn.Linear(dim_in, dim_attention), torch.nn.Tanh(),
+        )
+
+        self.attention_u = self.attention_v = torch.nn.Sequential(
+            torch.nn.Linear(dim_in, dim_attention), torch.nn.Sigmoid(),
+        )
+
+        self.attention_weights = torch.nn.Linear(dim_attention, num_attention_weigths)
+
+    def forward(self, x_in):
+        r"""Forward pass through the gated attention layer.
+        """
+        # calculate the attention weights for each bag embedding
+        A_V = self.attention_v(x_in)
+        A_U = self.attention_u(x_in)
+        A = self.attention_weights(A_V * A_U)
+        A = torch.transpose(A, 2, 1)
+        A = F.softmax(A, dim=2)
+
+        # multiply each bag with its corresponding weight
+        M = torch.bmm(A, x_in)
+
+        return M
 
 
 class GLKLayer(torch.nn.Module):

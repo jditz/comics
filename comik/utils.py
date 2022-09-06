@@ -5,6 +5,7 @@ package.
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn.functional as F
 from scipy import stats
 from sklearn.cluster import KMeans
 from sklearn.metrics import (
@@ -359,6 +360,77 @@ def sample_data(
     return samples[:already_sampled, :]
 
 
+def sample_data_multiomics(
+    data_loader: torch.utils.data.DataLoader, n_features: list, n_samples: int = 100000
+):
+    r"""Data sampling utility function that is specily designed for multi omics datasets.
+
+    Parameters
+    ----------
+    data_loader : torch.utils.data.DataLoader
+        PyTorch DataLoader object that handles access to training data. In general, other objects 
+        can be used to access the data. The only prerequisite is that it is possible to retreive
+        the data and label as PyTorch Tensors when iterated over the object. We strongly recommend
+        to use a PyTorch DataLoader object.
+    n_features : int
+        Number of features in the data set. In other words, the data set consists of data points
+        with n_features dimentions.
+    n_samples : int
+        Number of data points that will be sampled from the data.
+
+    Returns
+    -------
+    samples : list
+        List of tensors containing the sampled data points.
+    """
+    # initialize the tensors that will store the samples
+    samples = []
+    for n_f in n_features:
+        samples.append(torch.zeros(n_samples, n_f))
+
+    # determine the number of data points sampled per batch
+    #    -> we make sure that we sample at least 500 data points per batch to reduce runtime
+    n_samples_per_batch = max(
+        (n_samples + len(data_loader) - 1) // len(data_loader), 500
+    )
+
+    # iterate over the dataset
+    already_sampled = 0
+    for data, _ in data_loader:
+        # stop if already enough data points have been sampled
+        if already_sampled >= n_samples:
+            break
+
+        # iterate over all data types and sample independendly for all
+        current_size = 0
+        for i in range(len(n_features)):
+            # make sure to sample at most the number of data points in the current batch
+            max_samples_per_batch = min(data[i].size(0), n_samples_per_batch)
+
+            # sample random indices of the data Tensor (number of sampled indices is either the
+            # maximum number of data points or n_samples_per_batch, whatever is smaller)
+            indices = torch.randperm(data[i].size(0))[:max_samples_per_batch]
+            current_samples = data[i][indices]
+
+            # only use a subset of the sampled data points in this batch, if this batch would
+            # exceed the maximum number of samples
+            current_size = current_samples.size(0)
+            if already_sampled + current_size > n_samples:
+                current_size = n_samples - already_sampled
+                data_oliogmers = data_oliogmers[:current_size]
+
+            # update the samples Tensor with the current batch of sampled data points
+            samples[i][
+                already_sampled : already_sampled + current_size
+            ] = current_samples
+
+        already_sampled += current_size
+
+    # return the sampled data points
+    print(f"sample_data routine returned {already_sampled} sampled data points")
+    return [s[:already_sampled, :] for s in samples]
+
+
 def category_from_output(output):
     r"""This auxiliary function returns the class with highest probability from
     a network's output.
@@ -399,10 +471,17 @@ def recall_at_fdr(y_true, y_score, fdr_cutoff=0.05):
 
 def compute_metrics_classification(y_true, y_pred):
     r"""Compute standard performance metrics for predictions of a trained model.
-    Args:
-        y_true (Tensor): True label for each sample provided as a tensor of shape (n_sample x n_classes).
-        y_pred (Tensor): Predicted label for each sample provided as a tensor of shape (n_samples x n_classes).
-    Returns:
+    
+    Parameters
+    ----------
+    y_true : Tensor
+        True value for each sample provided as a tensor of shape (n_sample).
+    y_pred : Tensor
+        Predicted value for each sample provided as a tensor of shape (n_samples).
+    
+    Returns
+    -------
+    df_metric : pandas.DataFrame
         Different performance metrics for the provided predictions as a Pandas DataFrame.
     """
     y_true, y_pred = np.asarray(y_true), np.asarray(y_pred)
@@ -440,10 +519,293 @@ def compute_metrics_classification(y_true, y_pred):
 
 def compute_metrics_regression(y_true, y_pred):
     r"""Compute standard regression performance metrics for predictions of a trained model.
-    Args:
-        y_true (Tensor): True value for each sample provided as a tensor of shape (n_sample).
-        y_pred (Tensor): Predicted value for each sample provided as a tensor of shape (n_samples).
-    Returns:
+    
+    Parameters
+    ----------
+    y_true : Tensor
+        True value for each sample provided as a tensor of shape (n_sample).
+    y_pred : Tensor
+        Predicted value for each sample provided as a tensor of shape (n_samples).
+    
+    Returns
+    -------
+    df_metric : pandas.DataFrame
         Different performance metrics for the provided predictions as a Pandas DataFrame.
     """
-    pass
+    raise NotImplementedError("compute_metrics_regression is not implemented yet!")
+
+
+class ClassBalanceLoss(torch.nn.Module):
+    r"""Implementation of the Class-Balance Loss
+    Reference: Yin Cui, Menglin Jia, Tsung-Yi Lin, Yang Song, Serge Belongie; Proceedings of the IEEE/CVF Conference on
+               Computer Vision and Pattern Recognition (CVPR), 2019, pp. 9268-9277
+    """
+
+    def __init__(
+        self, samples_per_cls, no_of_classes, loss_type, beta, gamma, reduction="mean"
+    ):
+        r"""Constructor of the class-balance loss class
+
+        Parameters
+        ----------
+        samples_per_cls : list of int
+            List containing the number of samples per class in the dataset.
+        no_of_classes : int
+            Number of classes in the classification problem.
+        loss_type : str
+            Loss function used for the class-balance loss.
+        beta : float
+            Hyperparameter for class-balanced loss.
+        gamma : float
+            Hyperparameter for Focal loss
+
+        Raises
+        ------
+            ValueError: If len(samples_per_cls) != no_of_classes
+        """
+        # call constructor of parent class
+        super(ClassBalanceLoss, self).__init__()
+
+        # check whether the parameters are valid
+        if no_of_classes == 1:
+            self.binary = True
+        elif len(samples_per_cls) != no_of_classes:
+            raise ValueError(
+                "Dimensionality of first argument expected to be {}. Found {} instead!".format(
+                    no_of_classes, len(samples_per_cls)
+                )
+            )
+
+        # store user-specified parameters
+        self.samples_per_cls = samples_per_cls
+        self.no_of_classes = no_of_classes
+        self.loss_type = loss_type
+        self.beta = beta
+        self.gamma = gamma
+        self.reduction = reduction
+
+        effective_num = 1.0 - np.power(self.beta, self.samples_per_cls)
+        weights = (1.0 - self.beta) / np.array(effective_num)
+        weights = weights / np.sum(weights) * self.no_of_classes
+        print(weights)
+
+    def one_hot(self, labels, num_classes, device, dtype=None, eps=1e-6):
+        r"""Convert an integer label x-D tensor to a one-hot (x+1)-D tensor. Implementation by Kornia
+        (https://github.com/kornia).
+
+        Parameters
+        ----------
+        labels : torch.Tensor
+            Tensor with labels of shape :math:`(N, *)`, where N is batch size. Each value 
+            is an integer representing correct classification.
+        num_classes : int
+            Number of classes in labels.
+        device : str 
+            The desired device of returned tensor.
+        dtype : torch.dtype
+            The desired data type of returned tensor.
+        
+        Returns
+        -------
+        one_hot : torch.Tensor
+            The labels in one hot tensor of shape :math:`(N, C, *)`,
+        
+        Examples
+        --------
+            >>> labels = torch.LongTensor([[[0, 1], [2, 0]]])
+            >>> one_hot(labels, num_classes=3)
+            tensor([[[[1.0000e+00, 1.0000e-06],
+                      [1.0000e-06, 1.0000e+00]],
+            <BLANKLINE>
+                     [[1.0000e-06, 1.0000e+00],
+                      [1.0000e-06, 1.0000e-06]],
+            <BLANKLINE>
+                     [[1.0000e-06, 1.0000e-06],
+                      [1.0000e+00, 1.0000e-06]]]])
+        """
+        if not isinstance(labels, torch.Tensor):
+            raise TypeError(
+                f"Input labels type is not a torch.Tensor. Got {type(labels)}"
+            )
+
+        if not labels.dtype == torch.int64:
+            raise ValueError(
+                f"labels must be of the same dtype torch.int64. Got: {labels.dtype}"
+            )
+
+        if num_classes < 1:
+            raise ValueError(
+                "The number of classes must be bigger than one."
+                " Got: {}".format(num_classes)
+            )
+
+        shape = labels.shape
+        one_hot = torch.zeros(
+            (shape[0], num_classes) + shape[1:], device=device, dtype=dtype
+        )
+
+        return one_hot.scatter_(1, labels.unsqueeze(1), 1.0) + eps
+
+    def focal_loss(self, input, target, alpha, gamma=2.0, reduction="none", eps=None):
+        """Criterion that computes Focal loss. Implementation by Kornia (https://github.com/kornia).
+        According to :cite:`lin2018focal`, the Focal loss is computed as follows:
+        .. math::
+            \text{FL}(p_t) = -\alpha_t (1 - p_t)^{\gamma} \, \text{log}(p_t)
+        Where:
+           - :math:`p_t` is the model's estimated probability for each class.
+        Args:
+            input: logits tensor with shape :math:`(N, C, *)` where C = number of classes.
+            target: labels tensor with shape :math:`(N, *)` where each value is :math:`0 ≤ targets[i] ≤ C−1`.
+            alpha: Weighting factor :math:`\alpha \in [0, 1]`.
+            gamma: Focusing parameter :math:`\gamma >= 0`.
+            reduction: Specifies the reduction to apply to the
+              output: ``'none'`` | ``'mean'`` | ``'sum'``. ``'none'``: no reduction
+              will be applied, ``'mean'``: the sum of the output will be divided by
+              the number of elements in the output, ``'sum'``: the output will be
+              summed.
+            eps: Deprecated: scalar to enforce numerical stabiliy. This is no longer used.
+        Return:
+            the computed loss.
+        Example:
+            >>> N = 5  # num_classes
+            >>> input = torch.randn(1, N, 3, 5, requires_grad=True)
+            >>> target = torch.empty(1, 3, 5, dtype=torch.long).random_(N)
+            >>> output = focal_loss(input, target, alpha=0.5, gamma=2.0, reduction='mean')
+            >>> output.backward()
+        """
+        if eps is not None and not torch.jit.is_scripting():
+            warnings.warn(
+                "`focal_loss` has been reworked for improved numerical stability "
+                "and the `eps` argument is no longer necessary",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        if not isinstance(input, torch.Tensor):
+            raise TypeError(f"Input type is not a torch.Tensor. Got {type(input)}")
+
+        if not len(input.shape) >= 2:
+            raise ValueError(
+                f"Invalid input shape, we expect BxCx*. Got: {input.shape}"
+            )
+
+        if input.size(0) != target.size(0):
+            raise ValueError(
+                f"Expected input batch_size ({input.size(0)}) to match target batch_size ({target.size(0)})."
+            )
+
+        n = input.size(0)
+        out_size = (n,) + input.size()[2:]
+        if target.size()[1:] != input.size()[2:]:
+            raise ValueError(f"Expected target size {out_size}, got {target.size()}")
+
+        if not input.device == target.device:
+            raise ValueError(
+                f"input and target must be in the same device. Got: {input.device} and {target.device}"
+            )
+
+        # compute softmax over the classes axis
+        input_soft: torch.Tensor = F.softmax(input, dim=1)
+        log_input_soft: torch.Tensor = F.log_softmax(input, dim=1)
+
+        # create the labels one hot tensor
+        target_one_hot: torch.Tensor = self.one_hot(
+            target, num_classes=input.shape[1], device=input.device, dtype=input.dtype
+        )
+
+        # compute the actual focal loss
+        weight = torch.pow(-input_soft + 1.0, gamma)
+
+        focal = -alpha * weight * log_input_soft
+        loss_tmp = torch.einsum("bc...,bc...->b...", (target_one_hot, focal))
+
+        if reduction == "none":
+            loss = loss_tmp
+        elif reduction == "mean":
+            loss = torch.mean(loss_tmp)
+        elif reduction == "sum":
+            loss = torch.sum(loss_tmp)
+        else:
+            raise NotImplementedError(f"Invalid reduction mode: {reduction}")
+        return loss
+
+    def forward(self, logits, labels):
+        r"""Compute the Class Balanced Loss between `logits` and the ground truth `labels`.
+        Class Balanced Loss: ((1-beta)/(1-beta^n))*Loss(labels, logits) where Loss is one of the standard losses used
+        for Neural Networks.
+        
+        Parameters
+        ----------
+        logits : torch.Tensor
+            Output of the network given as a tensor of shape (batch_size x num_classes).
+        labels : torch.Tensor
+            True label of each sample given as a tensor of shape (batch_size x num_classes).
+        
+        Returns
+        -------
+        cb_loss : torch.Tensor
+            A float tensor representing class balanced loss.
+        
+        Raises
+        ------
+            ValueError: If an unknown loss function was specified during initialization of the ClassBalanceLoss object.
+        """
+        if self.binary:
+            effective_num = 1.0 - np.power(self.beta, self.samples_per_cls)
+            weights = (1.0 - self.beta) / np.array(effective_num)
+            weights = weights / np.sum(weights)
+
+            weights_tensor = torch.tensor(weights[1])
+            labels_one_hot = labels
+        else:
+            effective_num = 1.0 - np.power(self.beta, self.samples_per_cls)
+            weights = (1.0 - self.beta) / np.array(effective_num)
+            weights = weights / np.sum(weights) * self.no_of_classes
+
+            labels_one_hot = F.one_hot(labels, self.no_of_classes).float()
+
+            # we need to adapt the dimensionality of logits if the batch size is 1
+            #   -> otherwise logits and labels_one_hot have mismatching dimensionality
+            if labels_one_hot.shape[0] == 1:
+                logits = logits.view_as(labels_one_hot)
+
+            weights_tensor = labels_one_hot.new_tensor(weights)
+            weights_tensor = weights_tensor.unsqueeze(0)
+            weights_tensor = (
+                weights_tensor.repeat(labels_one_hot.shape[0], 1) * labels_one_hot
+            )
+            weights_tensor = weights_tensor.sum(1)
+            weights_tensor = weights_tensor.unsqueeze(1)
+            weights_tensor = weights_tensor.repeat(1, self.no_of_classes)
+
+        if self.loss_type == "focal":
+            cb_loss = self.focal_loss(labels_one_hot, logits, weights_tensor)
+        elif self.loss_type == "sigmoid":
+            cb_loss = F.binary_cross_entropy_with_logits(
+                input=logits,
+                target=labels_one_hot,
+                pos_weight=weights_tensor,
+                reduction=self.reduction,
+            )
+        elif self.loss_type == "softmax":
+            pred = logits.softmax(dim=1)
+            cb_loss = F.binary_cross_entropy(
+                input=pred,
+                target=labels_one_hot,
+                weight=weights_tensor,
+                reduction=self.reduction,
+            )
+        elif self.loss_type == "cross_entropy":
+            cb_loss = F.cross_entropy(
+                input=logits,
+                target=labels,
+                weight=torch.tensor(weights).float(),
+                reduction=self.reduction,
+            )
+        else:
+            raise ValueError(
+                "Undefined loss function: {}.".format(self.loss_type)
+                + "\n            Valid values are 'focal', 'sigmoid', 'softmax', and 'cross_entropy'."
+            )
+
+        return cb_loss

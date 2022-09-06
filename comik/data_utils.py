@@ -357,9 +357,9 @@ class OmicsDataset(data.Dataset):
         List containing all features
     labels : list
         List containing all labels
-    nb_features : int
+    num_features : int
         Number of features each sample consists of
-    nb_classes : int
+    num_classes : int
         Number of classes, i.e. number of different labels, in the dataset. This number will
         be one for regression and can be one for binary classification.
     """
@@ -492,9 +492,9 @@ class MultiOmicsDataset(data.Dataset):
         of this datatype.
     labels : list
         List containing all labels.
-    nb_features : list
+    num_features : list
         Number of features of each data type. Every sample has to have the same amount of features.
-    nb_classes : int
+    num_classes : int
         Number of classes, i.e. number of different labels, in the dataset. This number will
         be one for regression and can be one for binary classification.
     """
@@ -504,7 +504,7 @@ class MultiOmicsDataset(data.Dataset):
         data_files: list,
         label_file: str,
         omics_format: list,
-        separators: str or list,
+        separators: str or list = ",",
         num_classes: int = 1,
         class_labels=None,
         raise_unequal_sample_count: bool = True,
