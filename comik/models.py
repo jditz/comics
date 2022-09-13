@@ -406,6 +406,7 @@ class PIMKLNet(nn.Module):
         pi_laplacians: list,
         pooling: bool = True,
         attention: str = "none",
+        attention_params: list = [8, 1],
     ) -> None:
         r"""Constructor of the PIMKLNet class
 
@@ -427,6 +428,9 @@ class PIMKLNet(nn.Module):
             kernel evaluation.
         attention : str
             Determine the type of attention layer used in the network.
+        attention_params : list
+            List containing the parameters of the attention layer. Only used if attention is set 
+            to "normal" or "gated".
         """
         super().__init__()
 
@@ -450,10 +454,14 @@ class PIMKLNet(nn.Module):
             self.attention_dim = num_anchors
 
         if attention == "normal":
-            self.attent = AttentionLayer(self.attention_dim, 8, 1)
+            self.attent = AttentionLayer(
+                self.attention_dim, attention_params[0], attention_params[1]
+            )
             self.fc = nn.Linear(self.attention_dim, 1)
         elif attention == "gated":
-            self.attent = GatedAttentionLayer(self.attention_dim, 8, 1)
+            self.attent = GatedAttentionLayer(
+                self.attention_dim, attention_params[0], attention_params[1]
+            )
             self.fc = nn.Linear(self.attention_dim, 1)
         else:
             self.fc = nn.Linear(self.embedding_dim, num_classes)
@@ -1217,6 +1225,7 @@ class MultiPIMKLNet(nn.Module):
         pi_laplacians: list,
         pooling: bool = True,
         attention: str = "none",
+        attention_params: list = [8, 1],
     ):
         r"""Constructor of the MultiPIMKLNet class
 
@@ -1237,6 +1246,8 @@ class MultiPIMKLNet(nn.Module):
             If set to True, perform max pooling of the output of each pathway-induced kernel evaluation.
         attention : str
             Determines the type of attention that will be used.
+        attention_params : list
+            Parameters of the attention layer.
         """
         super().__init__()
 
@@ -1283,11 +1294,15 @@ class MultiPIMKLNet(nn.Module):
 
         # define attention and output layer
         if attention == "normal":
-            self.attent = AttentionLayer(self.attention_dim, 8, 1)
-            self.out = nn.Linear(sum(self.n_pathways), num_classes)
+            self.attent = AttentionLayer(
+                self.attention_dim, attention_params[0], attention_params[1]
+            )
+            self.out = nn.Linear(self.attention_dim, num_classes)
         elif attention == "gated":
-            self.attent = GatedAttentionLayer(self.attention_dim, 8, 1)
-            self.out = nn.Linear(sum(self.n_pathways), num_classes)
+            self.attent = GatedAttentionLayer(
+                self.attention_dim, attention_params[0], attention_params[1]
+            )
+            self.out = nn.Linear(self.attention_dim, num_classes)
         else:
             self.out = nn.Linear(self.embedding_dim, num_classes)
 
@@ -1324,6 +1339,7 @@ class MultiPIMKLNet(nn.Module):
         if self.attention in ["normal", "gated"]:
             x_out = x_out.view(-1, sum(self.n_pathways), self.attention_dim)
             x_out = self.attent(x_out)
+            x_out = x_out.view(-1, self.attention_dim)
 
         # pass concatinated outputs through Linear layer
         x_out = self.out(x_out)
