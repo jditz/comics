@@ -1,9 +1,9 @@
 from setuptools import setup
 
 setup(
-    name="comik",
+    name="comic",
     version="0.1",
-    description="Interpretable End-to-End Learning for Graph-Based Data in Healthcare",
+    description="Convolutional Kernel Networks for Interpretable End-to-End Learning on (Multi-)Omics Data",
     author="Jonas Ditz",
     author_email="jonas.ditz@uni-tuebingen.de",
     python_requires=">=3.7, <3.10",
@@ -17,7 +17,7 @@ setup(
         "torch>=1.8.1",
         "torchvision>=0.9.1",
         "torchaudio>=0.8.1",
-        "pyunlocbox"
+        "pyunlocbox",
     ],
-    zip_safe=False
+    zip_safe=False,
 )

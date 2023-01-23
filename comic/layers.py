@@ -92,13 +92,17 @@ class AttentionLayer(torch.nn.Module):
             torch.nn.Linear(dim_attention, num_attention_weigths),
         )
 
-    def forward(self, x_in):
+    def forward(self, x_in, show_attention_weight=False):
         r"""Forward pass through the attention layer.
         """
         # calculate the attention weights for each bag embedding
         A = self.attention(x_in)
         A = torch.transpose(A, 2, 1)
         A = F.softmax(A, dim=2)
+
+        # print out attention weight for analysis
+        if show_attention_weight:
+            print(A)
 
         # multiply each bag with its corresponding weight
         M = torch.bmm(A, x_in)
@@ -123,7 +127,7 @@ class GatedAttentionLayer(torch.nn.Module):
         dim_in : int
             Dimensionality of the input to the attention layer.
         dim_attention : int
-            Dimensionality of the first parameter of the attention layer.
+            Dimensionality of the two parameters of the attention layer.
         num_attention_weights : int
             Number of attention weights assigned to each instance.
         """
@@ -134,13 +138,13 @@ class GatedAttentionLayer(torch.nn.Module):
             torch.nn.Linear(dim_in, dim_attention), torch.nn.Tanh(),
         )
 
-        self.attention_u = self.attention_v = torch.nn.Sequential(
+        self.attention_u = torch.nn.Sequential(
             torch.nn.Linear(dim_in, dim_attention), torch.nn.Sigmoid(),
         )
 
         self.attention_weights = torch.nn.Linear(dim_attention, num_attention_weigths)
 
-    def forward(self, x_in):
+    def forward(self, x_in, show_attention_weight=False):
         r"""Forward pass through the gated attention layer.
         """
         # calculate the attention weights for each bag embedding
@@ -149,6 +153,10 @@ class GatedAttentionLayer(torch.nn.Module):
         A = self.attention_weights(A_V * A_U)
         A = torch.transpose(A, 2, 1)
         A = F.softmax(A, dim=2)
+
+        # print out attention weight for analysis
+        if show_attention_weight:
+            print(A)
 
         # multiply each bag with its corresponding weight
         M = torch.bmm(A, x_in)

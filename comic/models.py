@@ -466,7 +466,7 @@ class PIMKLNet(nn.Module):
         else:
             self.fc = nn.Linear(self.embedding_dim, num_classes)
 
-    def forward(self, x_in, proba=False):
+    def forward(self, x_in, proba=False, show_attention_weight=False):
         r"""Implementation of the forward pass through the network.
 
         Parameters
@@ -476,6 +476,11 @@ class PIMKLNet(nn.Module):
             (batch_size x self.in_channels x seq_len)
         proba : bool
             Indicates whether the network should produce probabilistic output
+        show_attention_weight : bool
+            Indidactes whether or not the attention weights calculated during the
+            forward pass through the attention layer should be printed to the
+            terminal.
+            ATTENTION: It is not recommended to set this flag to True during training!
         
         Returns
         -------
@@ -491,7 +496,7 @@ class PIMKLNet(nn.Module):
         if self.attention in ["normal", "gated"]:
             # split each input into the bag of instances
             x_out = x_out.view(-1, self.n_pathways, self.attention_dim)
-            x_out = self.attent(x_out)
+            x_out = self.attent(x_out, show_attention_weight)
             x_out = x_out.view(-1, self.attention_dim)
 
         x_out = self.fc(x_out)
@@ -753,7 +758,9 @@ class PIMKLNet(nn.Module):
 
         return list_acc, list_loss
 
-    def predict(self, data_loader, proba=False, use_cuda=False):
+    def predict(
+        self, data_loader, proba=False, show_attention_weight=False, use_cuda=False
+    ):
         r"""Prediction function of the model
 
         Parameters
@@ -762,6 +769,10 @@ class PIMKLNet(nn.Module):
             PyTorch DataLoader that handles data
         proba : bool
             Indicates whether the network should produce probabilistic output.
+        show_attention_weight : bool
+            Indidactes whether or not the attention weights calculated during the
+            forward pass through the attention layer should be printed to the
+            terminal.
         use_cuda : bool
             Specified whether all computations will be performed on the GPU
         
@@ -782,6 +793,7 @@ class PIMKLNet(nn.Module):
         # iterate over all samples
         batch_start = 0
         for i, (data, label, *_) in enumerate(data_loader):
+            print(i)
 
             batch_size = data.shape[0]
 
@@ -791,7 +803,7 @@ class PIMKLNet(nn.Module):
 
             # do not keep track of the gradients during the forward propagation
             with torch.no_grad():
-                batch_out = self(data, proba).data.cpu()
+                batch_out = self(data, proba, show_attention_weight).data.cpu()
 
             # initialize tensor that holds the results of the forward propagation for each sample
             if i == 0:
@@ -1254,7 +1266,8 @@ class MultiPIMKLNet(nn.Module):
         # perform sanity checks
         if len(num_features) != len(num_anchors) != len(pi_laplacians):
             raise ValueError(
-                f"num_features, num_anchors, and pi_laplacians have to be of same length"
+                f"Inconsistent number of omics type. Make sure that\n"
+                "len(num_features) == len(num_anchors) == len(pi_laplacians)!"
             )
 
         # make sure that each omics datatype has the same number of anchor points if an
@@ -1266,6 +1279,7 @@ class MultiPIMKLNet(nn.Module):
                 )
 
         # initialize attributes
+        self.n_omics = len(num_anchors)
         self.n_features = num_features
         self.n_classes = num_classes
         self.n_anchors = num_anchors
@@ -1279,34 +1293,41 @@ class MultiPIMKLNet(nn.Module):
             self.pools = nn.ModuleList()
 
         self.embedding_dim = 0
-        for i in range(len(num_anchors)):
+        for i in range(self.n_omics):
             self.kernels.append(PIMKLLayer(num_anchors[i], pi_laplacians[i]))
 
             if pooling:
                 self.pools.append(
                     nn.MaxPool1d(kernel_size=num_anchors[i], stride=num_anchors[i])
                 )
-                self.embedding_dim += self.n_pathways[i]
-                self.attention_dim = 1
+                self.embedding_dim = self.n_pathways[i]
+                # self.attention_dim = 1
             else:
-                self.embedding_dim += num_anchors[i] * self.n_pathways[i]
-                self.attention_dim = num_anchors[i]
+                self.embedding_dim = num_anchors[i] * self.n_pathways[i]
+                # self.attention_dim = num_anchors[i]
 
         # define attention and output layer
         if attention == "normal":
             self.attent = AttentionLayer(
-                self.attention_dim, attention_params[0], attention_params[1]
+                self.embedding_dim, attention_params[0], attention_params[1]
             )
-            self.out = nn.Linear(self.attention_dim, num_classes)
+            self.out = nn.Linear(self.embedding_dim, num_classes)
         elif attention == "gated":
             self.attent = GatedAttentionLayer(
-                self.attention_dim, attention_params[0], attention_params[1]
+                self.embedding_dim, attention_params[0], attention_params[1]
             )
-            self.out = nn.Linear(self.attention_dim, num_classes)
-        else:
             self.out = nn.Linear(self.embedding_dim, num_classes)
+        else:
+            # self.omic_linear = nn.ModuleList()
+            # for i in range(len(num_anchors)):
+            #    self.omic_linear.append(
+            #        nn.Linear(self.n_pathways[i] * self.attention_dim, 1)
+            #    )
+            # self.pre_out = nn.Linear(len(num_anchors), attention_params[0])
+            # self.out = nn.Linear(attention_params[0], num_classes)
+            raise ValueError("Currently, multiomics models have to use attention!")
 
-    def forward(self, x_in, proba=False):
+    def forward(self, x_in, proba=False, show_attention_weight=False):
         r"""Implementation of the forward pass through the network.
 
         Parameters
@@ -1316,6 +1337,11 @@ class MultiPIMKLNet(nn.Module):
             (batch_size x num_features)
         proba : bool
             Indicates whether the network should produce probabilistic output
+        show_attention_weight : bool
+            Indidactes whether or not the attention weights calculated during the
+            forward pass through the attention layer should be printed to the
+            terminal.
+            ATTENTION: It is not recommended to set this flag to True during training!
         
         Returns
         -------
@@ -1333,13 +1359,24 @@ class MultiPIMKLNet(nn.Module):
 
             concat_out.append(x_out)
 
-        # concatenate the outputs of each kernel
-        x_out = torch.cat(concat_out, dim=1)
-
         if self.attention in ["normal", "gated"]:
-            x_out = x_out.view(-1, sum(self.n_pathways), self.attention_dim)
-            x_out = self.attent(x_out)
-            x_out = x_out.view(-1, self.attention_dim)
+            # concatenate the outputs of each kernel
+            x_out = torch.cat(concat_out, dim=1)
+
+            # push through attention layer
+            x_out = x_out.view(-1, self.n_omics, self.embedding_dim)
+            x_out = self.attent(x_out, show_attention_weight)
+            x_out = x_out.view(-1, self.embedding_dim)
+
+        else:
+            # concat_omics = []
+            # for i, aux_in in enumerate(concat_out):
+            #    x_out = self.omic_linear[i](aux_in)
+            #    concat_omics.append(x_out)
+
+            # x_out = torch.cat(concat_omics, dim=1)
+            # x_out = self.pre_out(x_out)
+            raise ValueError("Currently, multiomics models have to use attention!")
 
         # pass concatinated outputs through Linear layer
         x_out = self.out(x_out)
@@ -1602,7 +1639,9 @@ class MultiPIMKLNet(nn.Module):
 
         return list_acc, list_loss
 
-    def predict(self, data_loader, proba=False, use_cuda=False):
+    def predict(
+        self, data_loader, proba=False, show_attention_weight=False, use_cuda=False
+    ):
         r"""Prediction function of the model
 
         Parameters
@@ -1611,6 +1650,11 @@ class MultiPIMKLNet(nn.Module):
             PyTorch DataLoader that handles data
         proba : bool
             Indicates whether the network should produce probabilistic output.
+        show_attention_weight : bool
+            Indidactes whether or not the attention weights calculated during the
+            forward pass through the attention layer should be printed to the
+            terminal.
+            ATTENTION: It is not recommended to set this flag to True during training!
         use_cuda : bool
             Specified whether all computations will be performed on the GPU
         
@@ -1640,7 +1684,7 @@ class MultiPIMKLNet(nn.Module):
 
             # do not keep track of the gradients during the forward propagation
             with torch.no_grad():
-                batch_out = self(data, proba).data.cpu()
+                batch_out = self(data, proba, show_attention_weight).data.cpu()
 
             # initialize tensor that holds the results of the forward propagation for each sample
             if i == 0:
