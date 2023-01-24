@@ -1,5 +1,10 @@
 # COmic
-Interpretable End-to-End Learning for Graph-Based Data in Healthcare
+This repository contains the open-source implementation of Convolutional Omics Kernel Networks (COmic) as described
+in Ditz et al., "COmic: Convolutional Kernel Networks for Interpretable End-to-End Learning on (Multi-)Omics Data",
+2022. COmic is implemented using custom PyTorch layers, hence, can be easily integrated in existing PyTorch-based 
+neural network training pipelines. Furthermore, we provide a custom DataSet object that is specifically designed to
+handle divers (multi-)omics input data. The COmic package also provide several ready-tu-use models that allow users
+without a strong background in neural network creation to perform machine learning experiments with COmic models.
 
 ## Installation
 
@@ -32,7 +37,7 @@ You can run the unit-tests by executing
 
     $ python -m unittest
 
-from the root of the project. The ground truth needed for the tests is stored in the folder `data/gound_truth/`.
+from the `tests/` folder of the project. The ground truth needed for the tests is stored in the folder `tests/gound_truth/`.
 
 ## Documentation
 
@@ -40,4 +45,4 @@ The documentation is written with `sphinx`. You can build it by running
 
     $ cd docs && make html
 
-from the root of the project. The entry point for the documentation will be placed in `doc/_build/html/index.html` which you can open with a browser of your choice.
+from the root of the project. The entry point for the documentation will be placed in `docs/_build/html/index.html` which you can open with a browser of your choice.

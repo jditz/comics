@@ -1,4 +1,6 @@
 r"""Module that contains function and classes to handle omics data.
+
+Author: Jonas C. Ditz
 """
 
 from random import shuffle

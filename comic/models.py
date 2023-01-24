@@ -1,6 +1,8 @@
 r"""This module implements example networks that provide
 different functionality and can be used as ispiration
 for new networks utilizing the comik capabilities.
+
+Author: Jonas C. Ditz
 """
 
 import copy
@@ -75,6 +77,7 @@ class GLKNet(nn.Module):
         
         Returns
         -------
+        x_out : torch.Tensor
             Result of a forward pass through the model using the specified input. 
             If 'proba' is set to True, the output will be the probabilities assigned
             to each class by the model.
@@ -484,6 +487,7 @@ class PIMKLNet(nn.Module):
         
         Returns
         -------
+        x_out : torch.Tensor
             Result of a forward pass through the model using the specified input. 
             If 'proba' is set to True, the output will be the probabilities assigned
             to each class by the model.
@@ -886,6 +890,7 @@ class GLPIMKLNet(nn.Module):
         
         Returns
         -------
+        x_out : torch.Tensor
             Result of a forward pass through the model using the specified input. 
             If 'proba' is set to True, the output will be the probabilities assigned
             to each class by the model.
@@ -1345,6 +1350,7 @@ class MultiPIMKLNet(nn.Module):
         
         Returns
         -------
+        x_out : torch.Tensor
             Result of a forward pass through the model using the specified input. 
             If 'proba' is set to True, the output will be the probabilities assigned
             to each class by the model.

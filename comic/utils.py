@@ -1,5 +1,7 @@
 r"""Module of utility functionalities used in different parts of the
 package.
+
+Author: Jonas C. Ditz
 """
 
 import numpy as np
@@ -537,8 +539,9 @@ def compute_metrics_regression(y_true, y_pred):
 
 class ClassBalanceLoss(torch.nn.Module):
     r"""Implementation of the Class-Balance Loss
-    Reference: Yin Cui, Menglin Jia, Tsung-Yi Lin, Yang Song, Serge Belongie; Proceedings of the IEEE/CVF Conference on
-               Computer Vision and Pattern Recognition (CVPR), 2019, pp. 9268-9277
+
+    Reference: Yin Cui, Menglin Jia, Tsung-Yi Lin, Yang Song, Serge Belongie; Proceedings of the 
+    IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), 2019, pp. 9268-9277
     """
 
     def __init__(
@@ -647,26 +650,42 @@ class ClassBalanceLoss(torch.nn.Module):
         return one_hot.scatter_(1, labels.unsqueeze(1), 1.0) + eps
 
     def focal_loss(self, input, target, alpha, gamma=2.0, reduction="none", eps=None):
-        """Criterion that computes Focal loss. Implementation by Kornia (https://github.com/kornia).
-        According to :cite:`lin2018focal`, the Focal loss is computed as follows:
-        .. math::
-            \text{FL}(p_t) = -\alpha_t (1 - p_t)^{\gamma} \, \text{log}(p_t)
-        Where:
-           - :math:`p_t` is the model's estimated probability for each class.
-        Args:
-            input: logits tensor with shape :math:`(N, C, *)` where C = number of classes.
-            target: labels tensor with shape :math:`(N, *)` where each value is :math:`0 ≤ targets[i] ≤ C−1`.
-            alpha: Weighting factor :math:`\alpha \in [0, 1]`.
-            gamma: Focusing parameter :math:`\gamma >= 0`.
-            reduction: Specifies the reduction to apply to the
-              output: ``'none'`` | ``'mean'`` | ``'sum'``. ``'none'``: no reduction
-              will be applied, ``'mean'``: the sum of the output will be divided by
-              the number of elements in the output, ``'sum'``: the output will be
-              summed.
-            eps: Deprecated: scalar to enforce numerical stabiliy. This is no longer used.
-        Return:
-            the computed loss.
-        Example:
+        r"""Criterion that computes Focal loss. 
+        
+        Implementation by Kornia (https://github.com/kornia).
+
+        Reference: Lin, Tsung-Yi, et al. "Focal loss for dense object detection." 
+        Proceedings of the IEEE international conference on computer vision. 2017.
+        
+        According to Lin et al., the Focal loss is computed as 
+        :math:`\text{FL}(p_t) = -\alpha_t (1 - p_t)^{\gamma} \, \log (p_t)`
+        where :math:`p_t` is the model's estimated probability for each class.
+        
+        Parameters
+        ----------
+        input: torch.Tensor
+            Logits tensor with shape :math:`(N, C, *)` where C = number of classes.
+        target: torch.Tensor
+            Labels tensor with shape :math:`(N, *)` where each value is :math:`0 ≤ targets[i] ≤ C−1`.
+        alpha: float
+            Weighting factor :math:`\alpha \in [0, 1]`.
+        gamma: float
+            Focusing parameter :math:`\gamma >= 0`.
+        reduction: str
+            Specifies the reduction to apply to the output: ``'none'`` | ``'mean'`` | 
+            ``'sum'``. ``'none'``: no reduction will be applied, ``'mean'``: the sum of 
+            the output will be divided by the number of elements in the output, ``'sum'``: 
+            the output will be summed.
+        eps: float
+            (Deprecated) Scalar to enforce numerical stabiliy. This is no longer used.
+        
+        Returns
+        -------
+        loss : torch.Tensor
+            The computed loss.
+        
+        Examples
+        --------
             >>> N = 5  # num_classes
             >>> input = torch.randn(1, N, 3, 5, requires_grad=True)
             >>> target = torch.empty(1, 3, 5, dtype=torch.long).random_(N)

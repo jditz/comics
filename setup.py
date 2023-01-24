@@ -6,6 +6,7 @@ setup(
     description="Convolutional Kernel Networks for Interpretable End-to-End Learning on (Multi-)Omics Data",
     author="Jonas Ditz",
     author_email="jonas.ditz@uni-tuebingen.de",
+    packages=["comic"],
     python_requires=">=3.7, <3.10",
     install_requires=[
         "numpy>=1.19.2",
@@ -18,6 +19,8 @@ setup(
         "torchvision>=0.9.1",
         "torchaudio>=0.8.1",
         "pyunlocbox",
+        "sphinx",
+        "sphinx_bootstrap_theme",
     ],
     zip_safe=False,
 )

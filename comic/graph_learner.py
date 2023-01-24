@@ -3,6 +3,8 @@
 r"""
 This module implements functions used to learn graphical representations for
 data given sample observations from these variables
+
+Author: Jonas C. Ditz
 """
 
 import time
@@ -68,11 +70,12 @@ def log_degree_barrier(
     verbosity="NONE",
 ):
     r"""
-    Learn graph by imposing a log barrier on the degrees
+    Learn graph by imposing a log barrier on the degrees.
+
     This is done by solving
     :math:`\tilde{W} = \underset{W \in \mathcal{W}_m}{\text{arg}\min} \,
     \|W \odot Z\|_{1,1} - \alpha 1^{T} \log{W1} + \beta \| W \|_{F}^{2}`,
-    where :math:`Z` is a pairwise distance matrix, and :math:`\mathcal{W}_m`
+    where :math:`Z` is a pairwise distance matrix and :math:`\mathcal{W}_m`
     is the set of valid symmetric weighted adjacency matrices.
 
     Parameters
@@ -189,11 +192,12 @@ def l2_degree_reg(
 ):
     r"""
     Learn graph by regularizing the l2-norm of the degrees.
+
     This is done by solving
     :math:`\tilde{W} = \underset{W \in \mathcal{W}_m}{\text{arg}\min} \,
-    \|W \odot Z\|_{1,1} + \alpha \|W1}\|^2 + \alpha \| W \|_{F}^{2}`, subject
-    to :math:`\|W\|_{1,1} = s`, where :math:`Z` is a pairwise distance matrix,
-    and :math:`\mathcal{W}_m`is the set of valid symmetric weighted adjacency
+    \|W \odot Z\|_{1,1} + \alpha \|W\|^2 + \alpha \| W \|_{F}^{2}`, subject
+    to :math:`\|W\|_{1,1} = s`, where :math:`Z` is a pairwise distance matrix
+    and :math:`\mathcal{W}_m` is the set of valid symmetric weighted adjacency
     matrices.
 
     Parameters
@@ -308,10 +312,11 @@ def l2_degree_reg(
 
 def glasso(X, alpha=1, w0=None, maxit=1000, rtol=1e-5, retall=False, verbosity="NONE"):
     r"""
-    Learn graph by imposing promoting sparsity in the inverse covariance.
+    Learn graph by imposing sparsity in the inverse covariance.
+
     This is done by solving
     :math:`\tilde{W} = \underset{W \succeq 0}{\text{arg}\min} \,
-    -\log \det W - \text{tr}(SW) + \alpha\|W \|_{1,1},
+    -\log \det W - \text{tr}(SW) + \alpha\|W \|_{1,1}`,
     where :math:`S` is the empirical (sample) covariance matrix.
 
     Parameters

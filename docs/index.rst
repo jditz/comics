@@ -1,5 +1,4 @@
-.. Convolutional Omics Kernel Network documentation master file, created by
-   sphinx-quickstart on Thu Sep 16 12:28:10 2021.
+.. Convolutional Omics Kernel Network documentation master file
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
@@ -12,6 +11,7 @@ Package Content
 .. autosummary::
    :toctree: _autosummary
    :template: my_modules.rst
+   :recursive:
 
    comic.models
    comic.layers
@@ -37,6 +37,7 @@ Requirements
 *   Pandas == 1.2.3
 *   SciKit-Learn == 0.24.1
 *   BioPython == 1.78
+*   PyUNLocBoX
 
 
 

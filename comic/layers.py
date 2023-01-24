@@ -1,5 +1,7 @@
-r"""This module implements custom layers that are needed to create a 
+"""This module implements custom layers that are needed to create a 
 comik network.
+
+Author: Jonas C. Ditz
 """
 
 import math
@@ -15,7 +17,7 @@ from .utils import kmeans
 
 
 class MatrixInverseSqrt(torch.autograd.Function):
-    r"""Matrix inverse square root for a symmetric definite positive matrix
+    """Matrix inverse square root for a symmetric definite positive matrix
     """
 
     @staticmethod
@@ -59,12 +61,12 @@ class MatrixInverseSqrt(torch.autograd.Function):
 
 
 def matrix_inverse_sqrt(input, eps=1e-2):
-    r"""Wrapper for MatrixInverseSqrt"""
+    """Wrapper for MatrixInverseSqrt"""
     return MatrixInverseSqrt.apply(input, eps)
 
 
 class AttentionLayer(torch.nn.Module):
-    r"""Attention-based Multiple Instance Layer
+    """Attention-based Multiple Instance Layer
 
     This class implements the attention-based multiple instance learning layer.
     """
@@ -72,7 +74,7 @@ class AttentionLayer(torch.nn.Module):
     def __init__(
         self, dim_in: int, dim_attention: int, num_attention_weigths: int
     ) -> None:
-        r"""Constructor of the AttentionLayer class
+        """Constructor of the AttentionLayer class
 
         Parameters
         ----------
@@ -93,7 +95,7 @@ class AttentionLayer(torch.nn.Module):
         )
 
     def forward(self, x_in, show_attention_weight=False):
-        r"""Forward pass through the attention layer.
+        """Forward pass through the attention layer.
         """
         # calculate the attention weights for each bag embedding
         A = self.attention(x_in)
@@ -111,7 +113,7 @@ class AttentionLayer(torch.nn.Module):
 
 
 class GatedAttentionLayer(torch.nn.Module):
-    r"""Gated attention-based Multiple Instance Layer
+    """Gated attention-based Multiple Instance Layer
 
     This class implements the gated attention-based multiple instance learning layer.
     In this implementation, the parameters U and V use the same dimensions.
@@ -120,7 +122,7 @@ class GatedAttentionLayer(torch.nn.Module):
     def __init__(
         self, dim_in: int, dim_attention: int, num_attention_weigths: int
     ) -> None:
-        r"""Constructor of the GatedAttentionLayer class
+        """Constructor of the GatedAttentionLayer class
 
         Parameters
         ----------
@@ -145,7 +147,7 @@ class GatedAttentionLayer(torch.nn.Module):
         self.attention_weights = torch.nn.Linear(dim_attention, num_attention_weigths)
 
     def forward(self, x_in, show_attention_weight=False):
-        r"""Forward pass through the gated attention layer.
+        """Forward pass through the gated attention layer.
         """
         # calculate the attention weights for each bag embedding
         A_V = self.attention_v(x_in)
@@ -165,7 +167,7 @@ class GatedAttentionLayer(torch.nn.Module):
 
 
 class GLKLayer(torch.nn.Module):
-    r"""Convolutional Graph Learning Kernel Layer
+    """Convolutional Graph Learning Kernel Layer
 
     This layer implements a convolutional learning kernel layer that uses a single graph Laplacian.
     The weights of GLKLayers represent the anchor points, i.e. representative real-valued
@@ -182,7 +184,7 @@ class GLKLayer(torch.nn.Module):
         graph_learner: str,
         graph_learner_params=None,
     ):
-        r"""Constructor of the ComikLayer class
+        """Constructor of the ComikLayer class
 
         Parameters
         ----------
@@ -234,14 +236,14 @@ class GLKLayer(torch.nn.Module):
             self.graph_learner = lambda x: gl_framework(x, **graph_learner_params)
 
     def train(self, mode=True):
-        r"""Toggle between training (mode = True) and evaluation mode (mode = False)
+        """Toggle between training (mode = True) and evaluation mode (mode = False)
         """
         super().train(mode)
         if self.training is True:
             self._need_lintrans_computed = True
 
     def eval(self):
-        r"""Sets model in evaluation mode
+        """Sets model in evaluation mode
         """
         self.train(False)
 
@@ -257,7 +259,7 @@ class GLKLayer(torch.nn.Module):
         use_cuda: bool = False,
         init_laplacian: Union[np.ndarray, bool] = None,
     ):
-        r"""Method to initialize the anchor points and graph Laplacian
+        """Method to initialize the anchor points and graph Laplacian
         
         This function either uses the kaiming routine to initialize the anchor
         points with uniformly distributed random values or takes a set of
@@ -320,7 +322,7 @@ class GLKLayer(torch.nn.Module):
                 self.learn_graph()
 
     def forward(self, x_in):
-        r"""Definition of the computation performed on every call
+        """Definition of the computation performed on every call
 
         Parameters
         ----------
@@ -339,7 +341,7 @@ class GLKLayer(torch.nn.Module):
         return x_out
 
     def _kernel_func(self, x_in):
-        r"""Evaluation of the kernel function between each input and each anchor point
+        """Evaluation of the kernel function between each input and each anchor point
 
         Parameters
         ----------
@@ -358,7 +360,7 @@ class GLKLayer(torch.nn.Module):
         return x_out
 
     def _compute_lintrans(self):
-        r"""Compute the linear transformation factor K_(ZZ)^(-1/2)
+        """Compute the linear transformation factor K_(ZZ)^(-1/2)
 
         Returns
         -------
@@ -384,7 +386,7 @@ class GLKLayer(torch.nn.Module):
         return lintrans
 
     def _project_onto_subspace(self, x_in, lintrans):
-        r"""Projection of inputs onto the RKHS subspace that is spanned by the
+        """Projection of inputs onto the RKHS subspace that is spanned by the
         anchor points
 
         Parameters
@@ -414,7 +416,7 @@ class GLKLayer(torch.nn.Module):
         )
 
     def learn_graph(self):
-        r"""Function to update the graph Laplacian given the current set of anchor points
+        """Function to update the graph Laplacian given the current set of anchor points
         """
         # call the chosen graph learning framework with the current set of anchor points
         aux_weights = self.weight.t().detach().cpu().numpy()
@@ -428,14 +430,16 @@ class GLKLayer(torch.nn.Module):
 
 
 class PIMKLLayer(torch.nn.Module):
-    r"""This layer implements the pathway-induced multiple kernel learning
+    """Convolutional Pathway-Induced Kernel Layer
+    
+    This layer implements the pathway-induced multiple kernel learning
     (PIMKL) as proposed by Manica et al, 2019. Predefined Laplacians for selected
     pathways are used to learn a subspace of the RKHS spanned by these Laplacians
     and real-valued graph signal representations.
     """
 
     def __init__(self, num_anchors: int, pi_laplacians: list):
-        r"""Constructor of the PIMKLLayer class.
+        """Constructor of the PIMKLLayer class.
 
         Parameters
         ----------
@@ -489,14 +493,14 @@ class PIMKLLayer(torch.nn.Module):
         self.init_params()
 
     def train(self, mode=True):
-        r"""Toggle between training (mode = True) and evaluation mode (mode = False)
+        """Toggle between training (mode = True) and evaluation mode (mode = False)
         """
         super().train(mode)
         if self.training is True:
             self._need_lintrans_computed = True
 
     def eval(self):
-        r"""Sets model in evaluation mode
+        """Sets model in evaluation mode
         """
         self.train(False)
 
@@ -511,7 +515,7 @@ class PIMKLLayer(torch.nn.Module):
         tol: float = 1e-4,
         use_cuda: bool = False,
     ):
-        r"""Method to initialize the anchor points
+        """Method to initialize the anchor points
         
         This function either uses the kaiming routine to initialize the anchor
         points with uniformly distributed random values or takes a set of
@@ -569,7 +573,7 @@ class PIMKLLayer(torch.nn.Module):
                 self.anchors[i].data = cluster_centers
 
     def forward(self, x_in):
-        r"""Definition of the computation performed on every call
+        """Definition of the computation performed on every call
 
         Parameters
         ----------
@@ -602,7 +606,7 @@ class PIMKLLayer(torch.nn.Module):
         return x_out
 
     def _kernel_func(self, x_in, kernel_idx: int):
-        r"""Evaluation of the kernel function between each input and each anchor point
+        """Evaluation of the kernel function between each input and each anchor point
 
         Parameters
         ----------
@@ -625,7 +629,7 @@ class PIMKLLayer(torch.nn.Module):
         return x_out
 
     def _compute_lintrans(self, kernel_idx: int):
-        r"""Compute the linear transformation factor K_(ZZ)^(-1/2)
+        """Compute the linear transformation factor K_(ZZ)^(-1/2)
 
         Parameters
         ----------
@@ -656,7 +660,7 @@ class PIMKLLayer(torch.nn.Module):
         return lintrans
 
     def _project_onto_subspace(self, x_in, lintrans):
-        r"""Projection of inputs onto the RKHS subspace that is spanned by the
+        """Projection of inputs onto the RKHS subspace that is spanned by the
         anchor points
 
         Parameters
@@ -687,7 +691,9 @@ class PIMKLLayer(torch.nn.Module):
 
 
 class GLPIMKLLayer(torch.nn.Module):
-    """This layer implements a co,bination of the pathway-induced multiple
+    """Convolutional Graph-Learner Pathway-Induced Kernel Layer
+    
+    This layer implements a combination of the pathway-induced multiple
     kernel learning (PIMKL) framework as proposed by Manica et al, 2019 with the 
     graph learning framework used in the GLKLayer. In contrast to PIMKLLayers, 
     predefined Laplacians are only used to initialize the layer but the Laplacians 
@@ -702,7 +708,7 @@ class GLPIMKLLayer(torch.nn.Module):
         graph_learner: str,
         graph_learner_params: dict = None,
     ):
-        r"""Constructor of the PIMKLLayer class.
+        """Constructor of the PIMKLLayer class.
 
         Parameters
         ----------
@@ -759,14 +765,14 @@ class GLPIMKLLayer(torch.nn.Module):
         self.init_params()
 
     def train(self, mode=True):
-        r"""Toggle between training (mode = True) and evaluation mode (mode = False)
+        """Toggle between training (mode = True) and evaluation mode (mode = False)
         """
         super().train(mode)
         if self.training is True:
             self._need_lintrans_computed = True
 
     def eval(self):
-        r"""Sets model in evaluation mode
+        """Sets model in evaluation mode
         """
         self.train(False)
 
@@ -782,7 +788,7 @@ class GLPIMKLLayer(torch.nn.Module):
         use_cuda: bool = False,
         init_laplacian: Union[np.ndarray, bool] = None,
     ):
-        r"""Method to initialize the anchor points and graph Laplacian
+        """Method to initialize the anchor points and graph Laplacian
         
         This function either uses the kaiming routine to initialize the anchor
         points with uniformly distributed random values or takes a set of
@@ -843,7 +849,7 @@ class GLPIMKLLayer(torch.nn.Module):
                 )
 
     def forward(self, x_in):
-        r"""Definition of the computation performed on every call
+        """Definition of the computation performed on every call
 
         Parameters
         ----------
