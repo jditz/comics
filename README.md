@@ -54,6 +54,6 @@ We are providing several scripts together with the main COmic package. These scr
 develop user-specific COmic experiments. Furthermore, the scripts can be used to re-compute the experiments and analysis 
 presented in our corresponding manuscript.
 
-- `scripts/experiments.py` can be used to re-compute the experiments presented in COmic's corresponding manuscript or as a starting point for the development of user-specific experiments
+- `scripts/experiment.py` can be used to re-compute the experiments presented in COmic's corresponding manuscript or as a starting point for the development of user-specific experiments
 - `scripts/analysis.py` can be used to re-compute the analysis presented in COmic's corresponding manuscript or as a starting point for the development of user-specific analysis
 - `scripts/supplement.py` can be used to re-compute the figure in the supplementary material
