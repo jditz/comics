@@ -1,7 +1,8 @@
 # COmic
+
 This repository contains the open-source implementation of Convolutional Omics Kernel Networks (COmic) as described
-in Ditz et al., "COmic: Convolutional Kernel Networks for Interpretable End-to-End Learning on (Multi-)Omics Data",
-2022. COmic is implemented using custom PyTorch layers, hence, can be easily integrated in existing PyTorch-based 
+in Ditz et al., "COmic: Convolutional Kernel Networks for Interpretable End-to-End Learning on (Multi-)Omics Data".
+COmic is implemented using custom PyTorch layers, hence, can be easily integrated in existing PyTorch-based 
 neural network training pipelines. Furthermore, we provide a custom DataSet object that is specifically designed to
 handle divers (multi-)omics input data. The COmic package also provide several ready-to-use models that allow users
 without a strong background in neural network creation to perform machine learning experiments with COmic models.
