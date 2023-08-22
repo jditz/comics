@@ -494,23 +494,25 @@ def compute_metrics_classification(y_true, y_pred):
 
     # check for multiclass classification
     if len(y_true.shape) > 1 and len(y_pred.shape) > 1:
-        metric["F_score"] = f1_score(y_true.argmax(axis=1), y_pred.argmax(axis=1))
+        metric["F_score"] = f1_score(y_true.argmax(axis=1), y_pred.argmax(axis=1), average='macro')
         metric["MCC"] = matthews_corrcoef(y_true.argmax(axis=1), y_pred.argmax(axis=1))
     else:
         metric["F_score"] = f1_score(y_true, y_pred > 0.5)
         metric["MCC"] = matthews_corrcoef(y_true, y_pred > 0.5)
 
+        # the following metrices are only available for binary classification
+        metric["recall_at_10_fdr"] = recall_at_fdr(y_true, y_pred, 0.10)
+        metric["recall_at_5_fdr"] = recall_at_fdr(y_true, y_pred, 0.05)
+        metric["pearson.r"], metric["pearson.p"] = stats.pearsonr(
+            y_true.ravel(), y_pred.ravel()
+        )
+        metric["spearman.r"], metric["spearman.p"] = stats.spearmanr(
+            y_true, y_pred, axis=None
+        )
+
     metric["auROC"] = roc_auc_score(y_true, y_pred)
     metric["auROC50"] = roc_auc_score(y_true, y_pred, max_fpr=0.5)
     metric["auPRC"] = average_precision_score(y_true, y_pred)
-    metric["recall_at_10_fdr"] = recall_at_fdr(y_true, y_pred, 0.10)
-    metric["recall_at_5_fdr"] = recall_at_fdr(y_true, y_pred, 0.05)
-    metric["pearson.r"], metric["pearson.p"] = stats.pearsonr(
-        y_true.ravel(), y_pred.ravel()
-    )
-    metric["spearman.r"], metric["spearman.p"] = stats.spearmanr(
-        y_true, y_pred, axis=None
-    )
 
     df_metric = pd.DataFrame.from_dict(metric, orient="index")
     df_metric.columns = ["value"]
@@ -534,7 +536,21 @@ def compute_metrics_regression(y_true, y_pred):
     df_metric : pandas.DataFrame
         Different performance metrics for the provided predictions as a Pandas DataFrame.
     """
-    raise NotImplementedError("compute_metrics_regression is not implemented yet!")
+    y_true, y_pred = np.asarray(y_true), np.asarray(y_pred)
+
+    metric = {}
+    metric["explained_variance"] = explained_variance_score(y_true, y_pred)
+    metric["max_error"] = max_error(y_true, y_pred)
+    metric["mean_absolute_error"] = mean_absolute_error(y_true, y_pred)
+    metric["mean_squared_error"] = mean_squared_error(y_true, y_pred)
+    metric["r2"] = r2_score(y_true, y_pred)
+
+    # convert dict into DataFrame
+    df_metric = pd.DataFrame.from_dict(metric, orient="index")
+    df_metric.columns = ["value"]
+    df_metric.sort_index(inplace=True)
+
+    return df_metric
 
 
 class ClassBalanceLoss(torch.nn.Module):
@@ -578,6 +594,8 @@ class ClassBalanceLoss(torch.nn.Module):
                     no_of_classes, len(samples_per_cls)
                 )
             )
+        else:
+            self.binary = False
 
         # store user-specified parameters
         self.samples_per_cls = samples_per_cls
